@@ -1,9 +1,6 @@
 package ua.kinobox.data;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 
@@ -105,5 +102,13 @@ public final class MockCatalogService implements CatalogService {
         return CompletableFuture.completedFuture(IntStream.rangeClosed(1, 8)
                 .mapToObj(n -> new Episode(season, n, "Епізод " + n, "", 38 + (n * 7) % 20, null))
                 .toList());
+    }
+
+    @Override
+    public CompletableFuture<Optional<Title>> title(String id) {
+        return CompletableFuture.completedFuture(rows.stream()
+                .flatMap(row -> row.items().stream())
+                .filter(t -> t.id().equals(id))
+                .findFirst());
     }
 }

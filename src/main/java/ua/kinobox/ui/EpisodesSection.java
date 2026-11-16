@@ -14,7 +14,8 @@ import ua.kinobox.data.Season;
 import ua.kinobox.data.Title;
 
 import java.util.List;
-import java.util.function.Consumer;
+
+import java.util.function.BiConsumer;
 
 /**
  * Блок «Сезони та епізоди» на сторінці серіалу. Дані підвантажуються асинхронно.
@@ -26,7 +27,6 @@ final class EpisodesSection {
 
     private final Title series;
     private final CatalogService catalog;
-    private final Consumer<Title> onPlay;
 
     private final VBox root = new VBox(6);
     private final HBox seasonTabs = new HBox(10);
@@ -39,10 +39,12 @@ final class EpisodesSection {
      */
     private int requestedSeason;
 
-    EpisodesSection(Title series, CatalogService catalog, Consumer<Title> onPlay) {
+    private final BiConsumer<Title, Episode> onPlayEpisode;
+
+    EpisodesSection(Title series, CatalogService catalog, BiConsumer<Title, Episode> onPlayEpisode) {
         this.series = series;
         this.catalog = catalog;
-        this.onPlay = onPlay;
+        this.onPlayEpisode = onPlayEpisode;
 
         seasonTabs.getStyleClass().add("season-tabs");
         cards.getStyleClass().add("row-cards");
@@ -138,7 +140,7 @@ final class EpisodesSection {
 
         var button = FocusZoom.install(new Button(null, new VBox(8, still, name, meta)), 1.06);
         button.getStyleClass().setAll("episode-card");
-        button.setOnAction(e -> onPlay.accept(series)); // поки всі епізоди відкривають одне відео
+        button.setOnAction(e -> onPlayEpisode.accept(series, episode));
         return button;
     }
 }

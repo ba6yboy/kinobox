@@ -19,6 +19,12 @@ import ua.kinobox.data.Title;
 import java.util.Locale;
 import java.util.function.Consumer;
 
+import javafx.beans.binding.Bindings;
+
+import ua.kinobox.data.Episode;
+
+import java.util.function.BiConsumer;
+
 /**
  * Сторінка фільму або серіалу: опис, кнопки дій, для серіалів — епізоди.
  */
@@ -28,7 +34,9 @@ public final class DetailsScreen implements Screen {
     private final Button play;
 
     public DetailsScreen(Title t, MyList myList, Consumer<String> notify, Consumer<Title> onPlay,
-                         ObservableValue<ProgressStore.Progress> progress, CatalogService catalog) {
+                         ObservableValue<ProgressStore.Progress> progress, CatalogService catalog,
+                         ObservableValue<Boolean> available, BiConsumer<Title, Episode> onPlayEpisode) {
+
         root.getStyleClass().add("details");
 
         var art = Artwork.backdrop(t);
@@ -59,11 +67,16 @@ public final class DetailsScreen implements Screen {
         play.getStyleClass().setAll("primary-button");
         play.setOnAction(e -> onPlay.accept(t));
 
-        String startText = t.kind() == Title.Kind.SERIES ? "Дивитися С1:Е1" : "Дивитися";
+        String startText = "Дивитися";
         // Текст кнопки і смужка самі оновлюються, коли плеєр зберігає позицію
-        play.textProperty().bind(progress
+        ObservableValue<String> watchText = progress
                 .map(p -> "Продовжити з " + PlayerScreen.format(p.positionMs()))
-                .orElse(startText));
+                .orElse(startText);
+        // Текст залежить одразу від двох значень: чи є файл у медіатеці і чи почали дивитися
+        play.textProperty().bind(Bindings.createStringBinding(
+                () -> Boolean.TRUE.equals(available.getValue()) ? watchText.getValue() : "Немає у медіатеці",
+                available, watchText));
+        play.opacityProperty().bind(available.map(yes -> yes ? 1.0 : 0.55));
 
         var watched = new ProgressBar();
         watched.getStyleClass().add("details-progress");
@@ -101,8 +114,7 @@ public final class DetailsScreen implements Screen {
         content.setAlignment(Pos.BOTTOM_LEFT);
 
         if (t.kind() == Title.Kind.SERIES) {
-            content.getChildren().add(new EpisodesSection(t, catalog, onPlay).node());
-        }
+            content.getChildren().add(new EpisodesSection(t, catalog, onPlayEpisode).node());        }
 
         root.getChildren().addAll(art, fadeLeft, fadeBottom, content);
     }

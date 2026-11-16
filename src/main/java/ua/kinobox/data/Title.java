@@ -25,5 +25,10 @@ public record Title(
         return kind == Kind.MOVIE ? "Фільм" : "Серіал";
     }
 
+    /** Копія з іншою назвою — наприклад, «Серіал · С1:Е2» для плеєра. */
+    public Title withName(String newName) {
+        return new Title(id, newName, kind, year, genres, rating, overview, posterUrl, backdropUrl, accentHue);
+    }
+
     public enum Kind {MOVIE, SERIES}
 }

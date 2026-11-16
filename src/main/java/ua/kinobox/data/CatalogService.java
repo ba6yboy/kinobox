@@ -1,6 +1,7 @@
 package ua.kinobox.data;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -33,4 +34,17 @@ public interface CatalogService {
      * Епізоди одного сезону.
      */
     CompletableFuture<List<Episode>> episodes(Title series, int season);
+
+    /** Один тайтл за id ("movie:603", "tv:1399"). Порожньо, якщо не знайдено. Не завершується помилкою. */
+    CompletableFuture<Optional<Title>> title(String id);
+
+    /** Кілька тайтлів у тому ж порядку; ненайдені пропускаються. */
+    default CompletableFuture<List<Title>> titles(List<String> ids) {
+        List<CompletableFuture<Optional<Title>>> requests = ids.stream().map(this::title).toList();
+        return CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new))
+                .thenApply(done -> requests.stream()
+                        .map(CompletableFuture::join)
+                        .flatMap(Optional::stream)      // порожні Optional просто зникають зі списку
+                        .toList());
+    }
 }

@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
+import javafx.geometry.Insets;
+
 /**
  * Відеоплеєр на vlcj (libVLC) з двома режимами, як у Netflix:
  * повний (відео на весь екран) і компактний (відео зменшене, праворуч — серії).
@@ -81,8 +83,17 @@ public final class PlayerScreen implements Screen {
 
     private final Title title;
     private final String source;
+    /** Під яким ключем зберігати позицію (id тайтлу). Не адреса відео: у ній може бути API-ключ. */
+    private final String progressKey;
     private final ProgressStore progressStore;
     private final Consumer<String> notify;
+
+    /** Скільки секунд чекати перед автозапуском наступної серії. */
+    private static final int NEXT_COUNTDOWN_SECONDS = 10;
+
+    /** Що вмикати після цієї серії: підпис для картки і дія. */
+    public record Next(String label, Runnable play) {
+    }
 
     private MediaPlayerFactory factory;
     private EmbeddedMediaPlayer player;
@@ -96,11 +107,22 @@ public final class PlayerScreen implements Screen {
      */
     private volatile long resumeAtMs = -1;
 
-    public PlayerScreen(Title title, String source, ProgressStore progressStore, Consumer<String> notify) {
+    /** Наступна серія або null (фільм, остання серія). */
+    private final Next next;
+    private final VBox nextPanel = new VBox(6);
+    private final Label nextCountdown = new Label();
+    private Timeline nextTimer;
+    private int nextSecondsLeft;
+    private boolean nextShown;
+
+    public PlayerScreen(Title title, String source, String progressKey, ProgressStore progressStore,
+                        Consumer<String> notify, Next next) {
         this.title = title;
         this.source = source;
+        this.progressKey = progressKey;
         this.progressStore = progressStore;
         this.notify = notify;
+        this.next = next;
 
         root.getStyleClass().add("player");
         // У повному режимі фокус тримає сам екран: команди обробляє handle()
@@ -118,6 +140,9 @@ public final class PlayerScreen implements Screen {
         StackPane.setAlignment(tracksMenu, Pos.CENTER_RIGHT);
         StackPane.setMargin(tracksMenu, new Insets(0, 60, 0, 0));
         videoBox.getChildren().add(tracksMenu);
+        if (next != null) {
+            buildNextPanel();
+        }
         videoBox.setMinSize(0, 0);
         videoBox.prefWidthProperty().bind(root.widthProperty().multiply(videoShare));
 
@@ -185,16 +210,6 @@ public final class PlayerScreen implements Screen {
         var restart = sideButton("↺  Почати спочатку", this::restart);
         side.getChildren().addAll(name, resume, restart);
 
-        if (title.kind() == Title.Kind.SERIES) {
-            var caption = new Label("Наступні серії");
-            caption.getStyleClass().add("player-side-caption");
-            side.getChildren().add(caption);
-            for (int i = 1; i <= 6; i++) {
-                int episode = i; // у лямбду можна передати лише незмінну змінну
-                side.getChildren().add(sideButton("Серія " + episode, () -> playEpisode(episode)));
-            }
-        }
-
         firstSideAction = resume;
         side.getStyleClass().add("player-side");
         // На старті панель схована і не займає місця в розкладці
@@ -211,24 +226,11 @@ public final class PlayerScreen implements Screen {
         return button;
     }
 
-    private void playEpisode(int episode) {
-        resumeAtMs = -1;
-        // Поки всі серії — те саме відео. З TMDB/Jellyfin тут буде посилання на конкретну серію.
-        var saved = progressStore.position(source);
-        if (saved.isPresent()) {
-            resumeAtMs = saved.getAsLong(); // перемотаємо в події playing
-            notify.accept("Продовжуємо з " + format(resumeAtMs) + "    □ — почати спочатку");
-        }
-        player.media().play(source);
-        notify.accept("Серія " + episode);
-        setCompact(false);
-    }
-
     // ---------- Меню аудіодоріжок і субтитрів ----------
 
     private void restart() {
         resumeAtMs = -1;
-        progressStore.clear(source);
+        progressStore.clear(progressKey);
         player.media().play(source); // play замість setTime(0): спрацює навіть після кінця відео
         setCompact(false);
     }
@@ -302,6 +304,58 @@ public final class PlayerScreen implements Screen {
         showOverlay();
     }
 
+    // ---------- Наступна серія ----------
+
+    private void buildNextPanel() {
+        var caption = new Label("Наступна серія");
+        caption.getStyleClass().add("player-next-caption");
+        var name = new Label(next.label());
+        name.getStyleClass().add("player-next-title");
+        nextCountdown.getStyleClass().add("player-next-count");
+        var help = new Label("✕ Дивитися зараз    ○ Скасувати");
+        help.getStyleClass().add("player-help");
+
+        nextPanel.getChildren().addAll(caption, name, nextCountdown, help);
+        nextPanel.getStyleClass().add("player-next");
+        nextPanel.setMaxSize(VBox.USE_PREF_SIZE, VBox.USE_PREF_SIZE);
+        nextPanel.setVisible(false);
+        StackPane.setAlignment(nextPanel, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(nextPanel, new Insets(0, 60, 170, 0)); // над панеллю керування
+        videoBox.getChildren().add(nextPanel);
+    }
+
+    /** Серія закінчилась: показуємо картку і запускаємо відлік. */
+    private void showNextPanel() {
+        nextShown = true;
+        nextPanel.setVisible(true);
+        nextSecondsLeft = NEXT_COUNTDOWN_SECONDS;
+        nextCountdown.setText("через " + nextSecondsLeft + " с");
+        // Кадр щосекунди, рівно NEXT_COUNTDOWN_SECONDS разів
+        nextTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> {
+            nextSecondsLeft--;
+            if (nextSecondsLeft <= 0) {
+                playNext();
+            } else {
+                nextCountdown.setText("через " + nextSecondsLeft + " с");
+            }
+        }));
+        nextTimer.setCycleCount(NEXT_COUNTDOWN_SECONDS);
+        nextTimer.play();
+    }
+
+    private void hideNextPanel() {
+        nextShown = false;
+        nextPanel.setVisible(false);
+        if (nextTimer != null) {
+            nextTimer.stop();
+        }
+    }
+
+    private void playNext() {
+        hideNextPanel();
+        next.play().run(); // застосунок закриє цей плеєр і відкриє наступну серію
+    }
+
     // ---------- Життєвий цикл ----------
 
     /**
@@ -352,7 +406,7 @@ public final class PlayerScreen implements Screen {
         player.events().addMediaPlayerEventListener(new PlayerEvents());
 
         // 2. Потім вирішуємо, звідки почати
-        var saved = progressStore.position(source);
+        var saved = progressStore.position(progressKey);
         if (saved.isPresent()) {
             resumeAtMs = saved.getAsLong(); // перемотаємо в timeChanged, щойно файл стане seekable
             notify.accept("Продовжуємо з " + format(resumeAtMs) + "    □ — почати спочатку");
@@ -365,12 +419,15 @@ public final class PlayerScreen implements Screen {
 
     @Override
     public void onHidden() {
+        if (nextTimer != null) {
+            nextTimer.stop(); // плеєр закрили посеред відліку — наступна серія не повинна ввімкнутися сама
+        }
         hideTimer.stop();
         if (modeAnimation != null) {
             modeAnimation.stop();
         }
         if (player != null) {
-            progressStore.save(source, player.status().time(), player.status().length());
+            progressStore.save(progressKey, player.status().time(), player.status().length());
             player.controls().stop();
             player.release();
             factory.release();
@@ -386,6 +443,16 @@ public final class PlayerScreen implements Screen {
         if (player == null) {
             return false; // VLC не запустився — дозволяємо лише вийти
         }
+
+        if (nextShown) {
+            switch (command) {
+                case ACCEPT -> playNext();      // ✕ — дивитися зараз
+                case BACK -> hideNextPanel();   // ○ — скасувати; наступне ○ закриє плеєр
+                default -> { }                  // решту ігноруємо, поки йде відлік
+            }
+            return true;
+        }
+
         if (tracksOpen) {
             if (command == Command.BACK || command == Command.MENU) {
                 closeTracks();
@@ -470,7 +537,7 @@ public final class PlayerScreen implements Screen {
      */
     private void autosave(long timeMs, long lengthMs) {
         if (Math.abs(timeMs - lastSavedMs) >= AUTOSAVE_INTERVAL_MS) {
-            progressStore.save(source, timeMs, lengthMs);
+            progressStore.save(progressKey, timeMs, lengthMs);
             lastSavedMs = timeMs;
         }
     }
@@ -524,8 +591,12 @@ public final class PlayerScreen implements Screen {
         public void finished(MediaPlayer mp) {
             Platform.runLater(() -> {
                 updateState(false);
-                progressStore.clear(source);
-                notify.accept("Перегляд завершено");
+                progressStore.clear(progressKey);
+                if (next != null) {
+                    showNextPanel();
+                } else {
+                    notify.accept("Перегляд завершено");
+                }
             });
         }
 

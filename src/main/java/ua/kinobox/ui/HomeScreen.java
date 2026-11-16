@@ -21,6 +21,7 @@ import ua.kinobox.input.Command;
 import ua.kinobox.nav.ScrollUtil;
 import ua.kinobox.nav.SpatialNavigator;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -55,8 +56,9 @@ public final class HomeScreen implements Screen {
     /**
      * Поточний вузол ряду «Продовжити перегляд» або null, якщо ряду немає.
      */
-    private Node continueRow;
-    private PosterCard lastCard;
+    private final ObservableList<Title> library;
+    /** Ряди, що з'являються і зникають самі: «Продовжити перегляд», «У вашій медіатеці». */
+    private final List<Node> dynamicRows = new ArrayList<>();    private PosterCard lastCard;
 
     public HomeScreen(List<CatalogRow> rows, Actions actions) {
         this.openDetails = actions.openDetails();
@@ -68,6 +70,7 @@ public final class HomeScreen implements Screen {
         this.progressOf = actions.progressOf();
         this.sections = actions.sections();
         this.homeRows = rows;
+        this.library = actions.library();
 
         root.getStyleClass().add("home");
 
@@ -75,7 +78,9 @@ public final class HomeScreen implements Screen {
         rowsBox.getStyleClass().add("rows");
         setRows(rows);
         // «Продовжити перегляд» перебудовується, коли змінюється список (лише на «Головній»)
-        continueWatching.addListener((Observable obs) -> refreshContinueRow());
+        // Динамічні ряди перебудовуються, коли змінюється будь-який з їхніх списків
+        continueWatching.addListener((Observable obs) -> refreshDynamicRows());
+        library.addListener((Observable obs) -> refreshDynamicRows());
         var rowsScroll = new ScrollPane(rowsBox);
         rowsScroll.getStyleClass().setAll("page-scroll");
         rowsScroll.setFitToWidth(true);
@@ -148,18 +153,43 @@ public final class HomeScreen implements Screen {
         return box;
     }
 
-    private void refreshContinueRow() {
-        if (continueRow != null) {
-            rowsBox.getChildren().remove(continueRow);
-            continueRow = null;
+    /** Перебудувати динамічні ряди над звичайними (лише на «Головній»). */
+    private void refreshDynamicRows() {
+        // Якщо фокус у ряду, який зараз зникне, JavaFX сам перекине його на перший елемент сцени —
+        // у бокове меню. Тому запам'ятовуємо це і після перебудови повертаємо фокус на картки.
+        Node focused = root.getScene() == null ? null : root.getScene().getFocusOwner();
+        boolean focusInDynamicRow = focused != null
+                && dynamicRows.stream().anyMatch(row -> isInside(focused, row));
+
+        rowsBox.getChildren().removeAll(dynamicRows);
+        dynamicRows.clear();
+        if (currentSection == Section.HOME) {
+            if (!continueWatching.isEmpty()) {
+                dynamicRows.add(buildRow(new CatalogRow("Продовжити перегляд", List.copyOf(continueWatching)), true));
+            }
+            if (!library.isEmpty()) {
+                dynamicRows.add(buildRow(new CatalogRow("У вашій медіатеці", List.copyOf(library)), false));
+            }
+            rowsBox.getChildren().addAll(0, dynamicRows);
         }
-        if (currentSection != Section.HOME) {
-            return;
+
+        // Повертаємо фокус на картки, якщо:
+        //  - фокус був у ряду, що щойно зник, або
+        //  - на жодній картці фокусу ще не було (старт: перша картка могла зникнути,
+        //    не встигнувши з'явитися на екрані, — і фокус застряг би в боковому меню)
+        if (focusInDynamicRow || lastCard == null) {
+            Platform.runLater(this::focusFirstCard);
         }
-        if (!continueWatching.isEmpty()) {
-            continueRow = buildRow(new CatalogRow("Продовжити перегляд", List.copyOf(continueWatching)), true);
-            rowsBox.getChildren().add(0, continueRow);
+    }
+
+    /** Чи лежить вузол усередині контейнера (на будь-якій глибині). */
+    private static boolean isInside(Node node, Node container) {
+        for (Node n = node; n != null; n = n.getParent()) {
+            if (n == container) {
+                return true;
+            }
         }
+        return false;
     }
 
     /**
@@ -167,11 +197,10 @@ public final class HomeScreen implements Screen {
      */
     private void setRows(List<CatalogRow> rows) {
         rowsBox.getChildren().clear();
-        continueRow = null;
         for (CatalogRow row : rows) {
             rowsBox.getChildren().add(buildRow(row, false));
         }
-        refreshContinueRow(); // сам перевірить, чи це «Головна»
+        refreshDynamicRows(); // сам перевірить, чи це «Головна»
         rows.stream()
                 .filter(row -> !row.items().isEmpty())
                 .findFirst()
@@ -383,6 +412,7 @@ public final class HomeScreen implements Screen {
             Consumer<String> showMessage,
             Function<Section, CompletableFuture<List<CatalogRow>>> sections,
             ObservableList<Title> continueWatching,
-            Function<Title, ObservableValue<ProgressStore.Progress>> progressOf) {
+            Function<Title, ObservableValue<ProgressStore.Progress>> progressOf,
+            ObservableList<Title> library) {
     }
 }

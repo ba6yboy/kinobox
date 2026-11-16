@@ -9,6 +9,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 
+import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.scene.Scene;
+
 /**
  * Просторова навігація як на Smart TV: фокус переходить до найближчого
  * фокусованого елемента в напрямку натиснутої стрілки, незалежно від структури дерева вузлів.
@@ -76,6 +81,20 @@ public final class SpatialNavigator {
     }
 
     public static void focus(Node node) {
+        if (node.getScene() == null) {
+            // Вузол ще не на екрані: наприклад, картка всередині ScrollPane, який не встиг відмалюватися.
+            // requestFocus() зараз тихо нічого не зробить — тож чекаємо, доки вузол потрапить на сцену.
+            node.sceneProperty().addListener(new ChangeListener<>() {
+                @Override
+                public void changed(ObservableValue<? extends Scene> obs, Scene old, Scene scene) {
+                    if (scene != null) {
+                        node.sceneProperty().removeListener(this); // слухач одноразовий
+                        Platform.runLater(() -> focus(node));      // після layout — щоб прокрутка знала координати
+                    }
+                }
+            });
+            return;
+        }
         node.requestFocus();
         ScrollUtil.ensureVisible(node);
     }

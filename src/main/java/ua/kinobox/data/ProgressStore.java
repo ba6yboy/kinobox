@@ -25,6 +25,8 @@ public final class ProgressStore {
      * Менше 30 секунд — ще не перегляд, не зберігаємо.
      */
     private static final long MIN_POSITION_MS = 30_000;
+    /** Для коротких відео поріг «ще не почали» — не більше цієї частки тривалості. */
+    private static final double MIN_POSITION_SHARE = 0.05;
     /**
      * Після 95% тривалості вважаємо переглянутим і позицію видаляємо.
      */
@@ -88,7 +90,11 @@ public final class ProgressStore {
     }
 
     public void save(String source, long positionMs, long lengthMs) {
-        boolean barelyStarted = positionMs < MIN_POSITION_MS;
+        // «Ще не почали»: 30 секунд, але для коротких відео — не більше 5% тривалості
+        long minPosition = lengthMs > 0
+                ? Math.min(MIN_POSITION_MS, (long) (lengthMs * MIN_POSITION_SHARE))
+                : MIN_POSITION_MS;
+        boolean barelyStarted = positionMs < minPosition;
         boolean finished = lengthMs > 0 && positionMs > lengthMs * FINISHED_SHARE;
         if (barelyStarted || finished) {
             entries.remove(source);

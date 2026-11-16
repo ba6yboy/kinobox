@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Історія переглядів: які тайтли і коли відкривали в плеєрі.
@@ -30,6 +31,14 @@ public final class WatchHistory {
                 System.err.println("Не вдалося прочитати " + file + ": " + e.getMessage());
             }
         }
+    }
+
+    /** Ключ прогресу того, що дивилися в цьому тайтлі останнім (для серіалу — конкретна серія). */
+    public Optional<String> lastSource(String titleId) {
+        return entries.stream()
+                .filter(e -> e.title().id().equals(titleId))
+                .map(Entry::source)
+                .findFirst();
     }
 
     public static WatchHistory inUserHome() {

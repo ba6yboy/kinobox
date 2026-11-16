@@ -112,6 +112,14 @@ public final class TmdbCatalogService implements CatalogService {
             }
         }
 
+        // Повна картка тайтлу (movie/{id}, tv/{id}) містить жанри одразу з назвами
+        for (JsonNode genre : item.path("genres")) {
+            String name = genre.path("name").asText("");
+            if (!name.isBlank() && genreNames.size() < MAX_GENRES) {
+                genreNames.add(capitalize(name));
+            }
+        }
+
         String overview = text(item.path("overview"));
         if (overview == null || overview.isBlank()) {
             overview = "Опису українською поки немає.";
@@ -221,6 +229,20 @@ public final class TmdbCatalogService implements CatalogService {
         // search/multi шукає одночасно фільми, серіали й людей; людей parseList пропустить
         return client.get("search/multi", Map.of("query", query, "include_adult", "false"))
                 .thenCombine(genres, (json, genreNames) -> parseList(json, null, genreNames));
+    }
+
+    @Override
+    public CompletableFuture<Optional<Title>> title(String id) {
+        boolean movie = id.startsWith("movie:");
+        String tmdbId = id.substring(id.indexOf(':') + 1);
+        Title.Kind kind = movie ? Title.Kind.MOVIE : Title.Kind.SERIES;
+        return client.get((movie ? "movie/" : "tv/") + tmdbId, Map.of())
+                .thenApply(json -> Optional.of(toTitle(read(json), kind, Map.of())))
+                .exceptionally(error -> {
+                    // Один ненайдений тайтл не повинен зламати весь ряд
+                    System.err.println("TMDB, тайтл " + id + ": " + error.getMessage());
+                    return Optional.empty();
+                });
     }
 
     @Override
