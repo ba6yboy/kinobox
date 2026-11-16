@@ -1,0 +1,563 @@
+/* KinoBox — темна тема для «10-футового» інтерфейсу (керування з дивана) */
+
+.root {
+    -kb-bg: #0f0f12;
+    -kb-surface: #1d1d22;
+    -kb-text: #f2f2f2;
+    -kb-muted: #a3a3a8;
+    -kb-accent: #e5383b;
+    -kb-good: #46d369;
+
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 16px;
+    -fx-background-color: -kb-bg;
+}
+
+.label {
+    -fx-text-fill: -kb-text;
+}
+
+/* ---------- Прокрутка без смуг ---------- */
+.page-scroll, .row-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+    -fx-background-insets: 0;
+}
+
+.page-scroll > .viewport, .row-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* ---------- Банер ---------- */
+.billboard-fade-left {
+    -fx-background-color: linear-gradient(to right, -kb-bg 0%, rgba(15, 15, 18, 0.88) 28%, transparent 65%);
+}
+
+.billboard-fade-bottom {
+    -fx-background-color: linear-gradient(to bottom, transparent 0%, transparent 30%, rgba(15, 15, 18, 0.92) 50%, -kb-bg 62%);
+}
+
+.details-fade-bottom {
+    -fx-background-color: linear-gradient(to bottom, transparent 0%, transparent 40%, rgba(15, 15, 18, 0.95) 85%);
+}
+
+.billboard-info {
+    -fx-padding: 0 0 18 124;
+}
+
+.billboard-title {
+    -fx-font-size: 60px;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 18, 0.1, 0, 3);
+}
+
+.billboard-meta .label {
+    -fx-font-size: 18px;
+    -fx-text-fill: #d6d6da;
+}
+
+.billboard-meta .rating {
+    -fx-text-fill: -kb-good;
+    -fx-font-weight: bold;
+}
+
+.billboard-overview {
+    -fx-font-size: 19px;
+    -fx-text-fill: #dcdce0;
+    -fx-line-spacing: 4px;
+}
+
+/* ---------- Ряди карток ---------- */
+.rows {
+    -fx-padding: 0 0 120 0;
+}
+
+.row-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-padding: 6 0 0 124;
+}
+
+.row-cards {
+    -fx-spacing: 14px;
+    /* запас зверху/знизу, щоб збільшена картка не обрізалась */
+    -fx-padding: 16 64 18 124;
+}
+
+.poster-card {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 3px;
+    -fx-border-radius: 9px;
+    -fx-border-insets: -4px;
+    -fx-cursor: hand;
+}
+
+.poster-card:focused {
+    -fx-border-color: white;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.85), 26, 0.25, 0, 8);
+}
+
+.card-title {
+    -fx-font-size: 17px;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.9), 6, 0.3, 0, 1);
+}
+
+.card-badge {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-background-color: -kb-accent;
+    -fx-background-radius: 3px;
+    -fx-padding: 2 6 2 6;
+}
+
+/* ---------- Бокове меню ---------- */
+.sidebar {
+    -fx-pref-width: 86px;
+    -fx-spacing: 8px;
+    -fx-padding: 140 12 0 14;
+    -fx-background-color: linear-gradient(to right, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+}
+
+.sidebar:focus-within {
+    -fx-pref-width: 300px;
+    -fx-background-color: linear-gradient(to right, rgba(5, 5, 7, 0.97) 0%, rgba(5, 5, 7, 0.9) 70%, transparent 100%);
+}
+
+.side-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 10px;
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 20px;
+    -fx-padding: 12 16 12 16;
+    -fx-alignment: center-left;
+    -fx-content-display: graphic-only;
+    -fx-graphic-text-gap: 20px;
+    -fx-cursor: hand;
+}
+
+.sidebar:focus-within .side-item {
+    -fx-content-display: left;
+}
+
+.side-item .icon {
+    -fx-fill: -kb-muted;
+}
+
+.side-item.active .icon {
+    -fx-fill: white;
+}
+
+.side-item:focused {
+    -fx-background-color: rgba(255, 255, 255, 0.14);
+    -fx-text-fill: white;
+}
+
+.side-item:focused .icon {
+    -fx-fill: white;
+}
+
+/* ---------- Сторінка деталей ---------- */
+.details-content {
+    -fx-padding: 0 0 70 124;
+}
+
+.primary-button, .secondary-button {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-padding: 12 30 12 22;
+    -fx-background-radius: 6px;
+    -fx-graphic-text-gap: 10px;
+    -fx-border-color: transparent;
+    -fx-border-width: 3px;
+    -fx-border-radius: 9px;
+    -fx-border-insets: -6px;
+    -fx-cursor: hand;
+}
+
+.primary-button {
+    -fx-background-color: white;
+    -fx-text-fill: black;
+}
+
+.primary-button .icon {
+    -fx-fill: black;
+}
+
+.secondary-button {
+    -fx-background-color: rgba(109, 109, 115, 0.65);
+    -fx-text-fill: white;
+}
+
+.secondary-button .icon {
+    -fx-fill: white;
+}
+
+.primary-button:focused, .secondary-button:focused, .episode-card:focused {
+    -fx-border-color: white;
+}
+
+.section-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-padding: 22 0 0 0;
+}
+
+.episodes-scroll .row-cards {
+    -fx-padding: 16 64 18 6;
+}
+
+.episode-card {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8px;
+    -fx-border-color: transparent;
+    -fx-border-width: 3px;
+    -fx-border-radius: 10px;
+    -fx-border-insets: -4px;
+    -fx-pref-width: 256px;
+    -fx-padding: 0 0 10 0;
+    -fx-alignment: top-left;
+    -fx-cursor: hand;
+}
+
+.episode-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.episode-meta {
+    -fx-text-fill: -kb-muted;
+}
+
+/* ---------- Службові елементи ---------- */
+.toast {
+    -fx-background-color: rgba(30, 30, 35, 0.96);
+    -fx-background-radius: 24px;
+    -fx-border-color: rgba(255, 255, 255, 0.14);
+    -fx-border-radius: 24px;
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+    -fx-padding: 12 26 12 26;
+}
+
+.hint-bar {
+    -fx-text-fill: #7d7d84;
+    -fx-font-size: 15px;
+}
+
+/* ---------- Плеєр ---------- */
+.player {
+    -fx-background-color: black;
+}
+
+.player-overlay {
+    -fx-background-color: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 60%, transparent 100%);
+    -fx-padding: 140 80 44 80;
+}
+
+.player-title {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+}
+
+.player-state .icon {
+    -fx-fill: white;
+    -fx-scale-x: 1.4;
+    -fx-scale-y: 1.4;
+}
+
+.player-progress {
+    -fx-pref-height: 8px;
+}
+
+.player-progress > .track {
+    -fx-background-color: rgba(255, 255, 255, 0.25);
+    -fx-background-radius: 4px;
+    -fx-background-insets: 0;
+}
+
+.player-progress > .bar {
+    -fx-background-color: -kb-accent;
+    -fx-background-radius: 4px;
+    -fx-background-insets: 0;
+    -fx-padding: 4px;
+}
+
+.player-time {
+    -fx-font-size: 18px;
+    -fx-min-width: 150px;
+    -fx-alignment: center-right;
+}
+
+.player-help {
+    -fx-text-fill: #9a9aa0;
+    -fx-font-size: 15px;
+}
+
+/* ---------- Плеєр: бокова панель ---------- */
+.player-side {
+    -fx-background-color: #141414;
+    -fx-padding: 56 40 56 40;
+}
+
+.player-side-title {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+}
+
+.player-side-caption {
+    -fx-text-fill: #9a9aa0;
+    -fx-font-size: 16px;
+    -fx-padding: 16 0 0 0;
+}
+
+.player-episode {
+    -fx-background-color: #232323;
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+    -fx-padding: 14 18 14 18;
+    -fx-background-radius: 6px;
+    -fx-alignment: center-left;
+}
+
+.player-episode:focused {
+    -fx-background-color: -kb-accent;
+}
+
+/* ---------- Плеєр: меню доріжок ---------- */
+.player-tracks {
+    -fx-background-color: rgba(20, 20, 20, 0.92);
+    -fx-background-radius: 10px;
+    -fx-padding: 36 44 36 44;
+}
+
+.player-tracks-caption {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 0 6 0;
+}
+
+.player-tracks-empty {
+    -fx-text-fill: #9a9aa0;
+    -fx-font-size: 16px;
+}
+
+.player-track {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+    -fx-padding: 10 16 10 16;
+    -fx-background-radius: 6px;
+    -fx-alignment: center-left;
+    -fx-min-width: 280px;
+}
+
+.player-track.active {
+    -fx-font-weight: bold;
+}
+
+.player-track:focused {
+    -fx-background-color: -kb-accent;
+}
+
+/* ---------- Деталі: прогрес перегляду ---------- */
+.details-progress {
+    -fx-pref-height: 4px;
+}
+
+.details-progress > .track {
+    -fx-background-color: rgba(255, 255, 255, 0.25);
+    -fx-background-radius: 2px;
+    -fx-background-insets: 0;
+}
+
+.details-progress > .bar {
+    -fx-background-color: -kb-accent;
+    -fx-background-radius: 2px;
+    -fx-background-insets: 0;
+    -fx-padding: 2px;
+}
+
+/* ---------- Деталі: сезони й епізоди ---------- */
+.episode-card .episode-title {
+    -fx-font-size: 16px;
+    -fx-padding: 0 4 0 4;
+}
+
+.episode-card .episode-meta {
+    -fx-padding: 0 4 0 4;
+}
+
+.season-tabs {
+    -fx-padding: 18 0 4 0;
+}
+
+.season-tab {
+    -fx-background-color: rgba(109, 109, 115, 0.35);
+    -fx-text-fill: #c8c8cc;
+    -fx-font-size: 17px;
+    -fx-padding: 8 18 8 18;
+    -fx-background-radius: 18px;
+    -fx-border-color: transparent;
+    -fx-border-width: 3px;
+    -fx-border-radius: 21px;
+    -fx-border-insets: -3px;
+    -fx-cursor: hand;
+}
+
+.season-tab.active {
+    -fx-background-color: white;
+    -fx-text-fill: black;
+    -fx-font-weight: bold;
+}
+
+.season-tab:focused {
+    -fx-border-color: white;
+}
+
+/* ---------- Пошук ---------- */
+.search {
+    /* суцільний фон: головний екран під пошуком не видно */
+    -fx-background-color: -kb-bg;
+    -fx-padding: 40 64 28 64;
+}
+
+.search-field {
+    -fx-font-size: 30px;
+    -fx-background-color: -kb-surface;
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: -kb-muted;
+    -fx-highlight-fill: -kb-accent;
+    -fx-background-radius: 8px;
+    -fx-padding: 14 22 14 22;
+    -fx-border-color: transparent;
+    -fx-border-width: 3px;
+    -fx-border-radius: 10px;
+    -fx-border-insets: -3px;
+}
+
+.search-field:focused {
+    -fx-border-color: white;
+}
+
+.search-center {
+    -fx-padding: 12 0 12 0;
+}
+
+.search-status {
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 20px;
+    -fx-padding: 8 0 0 4;
+}
+
+.search-results {
+    /* запас, щоб збільшена у фокусі картка не обрізалась */
+    -fx-padding: 16 16 24 16;
+}
+
+.search-keyboard {
+    -fx-background-color: rgba(255, 255, 255, 0.04);
+    -fx-background-radius: 12px;
+    -fx-padding: 18;
+}
+
+.osk-key {
+    -fx-background-color: rgba(109, 109, 115, 0.35);
+    -fx-text-fill: white;
+    -fx-font-size: 22px;
+    -fx-min-height: 52px;
+    -fx-padding: 0;
+    -fx-background-radius: 6px;
+    -fx-cursor: hand;
+    -fx-alignment: center;
+}
+
+.osk-key:focused {
+    -fx-background-color: white;
+    -fx-text-fill: black;
+    -fx-font-weight: bold;
+}
+
+.osk-action {
+    -fx-font-size: 18px;
+}
+
+/* ---------- Картка: прогрес перегляду ---------- */
+.card-progress {
+    -fx-pref-height: 5px;
+}
+
+.card-progress > .track {
+    -fx-background-color: rgba(255, 255, 255, 0.3);
+    -fx-background-radius: 0;
+    -fx-background-insets: 0;
+}
+
+.card-progress > .bar {
+    -fx-background-color: -kb-accent;
+    -fx-background-radius: 0;
+    -fx-background-insets: 0;
+    -fx-padding: 2.5px;
+}
+
+.search-hint {
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 16px;
+    -fx-padding: 0 0 0 4;
+}
+
+/* ---------- Розділи ---------- */
+.section-status {
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 22px;
+    /* лівий відступ — як у рядів карток, щоб текст не ховався під меню */
+    -fx-padding: 40 64 0 124;
+}
+
+.section-status {
+    /* лівий відступ — як у рядів карток, щоб вміст не ховався під меню */
+    -fx-padding: 40 64 0 124;
+}
+
+.section-status-text {
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 22px;
+}
+
+/* ---------- Налаштування ---------- */
+.settings {
+    -fx-background-color: -kb-bg;
+    -fx-padding: 56 80 40 80;
+}
+
+.settings-title {
+    -fx-font-size: 40px;
+    -fx-font-weight: bold;
+}
+
+.settings-heading {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+}
+
+.settings-app-name {
+    -fx-font-size: 20px;
+}
+
+.settings-text {
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 17px;
+}
+
+.settings .secondary-button.danger {
+    -fx-background-color: -kb-accent;
+}
+
+.season-tabs {
+    /* 18 зверху — відступ від кнопок; по 6 з боків і знизу — запас для рамки фокуса */
+    -fx-padding: 18 6 6 6;
+}

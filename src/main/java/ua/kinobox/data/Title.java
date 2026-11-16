@@ -1,0 +1,29 @@
+package ua.kinobox.data;
+
+import java.util.List;
+
+/**
+ * Фільм або серіал у каталозі.
+ *
+ * @param posterUrl   URL постера; {@code null}, поки немає реального джерела (тоді малюється заглушка)
+ * @param backdropUrl URL широкого фонового зображення для hero-банера
+ * @param accentHue   відтінок (0–360) для кольорової заглушки постера
+ */
+public record Title(
+        String id,
+        String name,
+        Kind kind,
+        int year,
+        List<String> genres,
+        double rating,
+        String overview,
+        String posterUrl,
+        String backdropUrl,
+        double accentHue
+) {
+    public String kindLabel() {
+        return kind == Kind.MOVIE ? "Фільм" : "Серіал";
+    }
+
+    public enum Kind {MOVIE, SERIES}
+}
