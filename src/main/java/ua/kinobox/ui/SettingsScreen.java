@@ -16,15 +16,11 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-/**
- * «Налаштування»: кеш, історія переглядів, «Про програму» з обов'язковою атрибуцією TMDB.
- */
+/** «Налаштування»: кеш, історія переглядів, «Про програму» з обов'язковою атрибуцією TMDB. */
 public final class SettingsScreen implements Screen {
 
     private static final String VERSION = "0.1.0";
-    /**
-     * Текст атрибуції — дослівно, як вимагає TMDB.
-     */
+    /** Текст атрибуції — дослівно, як вимагає TMDB. */
     private static final String TMDB_NOTICE =
             "This product uses the TMDB API but is not endorsed or certified by TMDB.";
     private static final String TMDB_LOGO = "/ua/kinobox/tmdb-logo.png";
@@ -65,68 +61,15 @@ public final class SettingsScreen implements Screen {
         refreshCacheSize();
     }
 
-    // ---------- Кеш ----------
-
-    private static String formatSize(long bytes) {
-        return String.format(Locale.forLanguageTag("uk"), "%.1f МБ", bytes / 1024.0 / 1024.0);
+    @Override
+    public Parent view() {
+        return root;
     }
 
-    /**
-     * Офіційний логотип TMDB з ресурсів, якщо файл додано в проєкт.
-     */
-    private static Optional<ImageView> tmdbLogo() {
-        var url = SettingsScreen.class.getResource(TMDB_LOGO);
-        if (url == null) {
-            System.err.println("Немає " + TMDB_LOGO + " — додайте офіційний логотип TMDB (див. README)");
-            return Optional.empty();
-        }
-        // Ширина 0 = рахується автоматично за пропорціями
-        return Optional.of(new ImageView(new Image(url.toExternalForm(), 0, TMDB_LOGO_HEIGHT, true, true)));
+    @Override
+    public Node initialFocus() {
+        return clearCache;
     }
-
-    private static VBox section(String heading, Node... content) {
-        var label = new Label(heading);
-        label.getStyleClass().add("settings-heading");
-        var box = new VBox(10, label);
-        box.getChildren().addAll(content);
-        return box;
-    }
-
-    // ---------- Про програму ----------
-
-    private static Button settingsButton(String text) {
-        var button = FocusZoom.install(new Button(text), 1.04);
-        button.getStyleClass().setAll("secondary-button");
-        return button;
-    }
-
-    /**
-     * Небезпечна дія з підтвердженням: перше натискання лише просить підтвердити,
-     * друге протягом 3 секунд — виконує. Діалогові вікна з геймпадом незручні.
-     */
-    private static void confirmTwice(Button button, Runnable action) {
-        String original = button.getText();
-        var waiting = new PauseTransition(Duration.seconds(3));
-        Runnable reset = () -> {
-            button.setText(original);
-            button.getStyleClass().remove("danger");
-        };
-        waiting.setOnFinished(e -> reset.run());
-
-        button.setOnAction(e -> {
-            if (waiting.getStatus() == Animation.Status.RUNNING) {
-                waiting.stop();
-                reset.run();
-                action.run();
-            } else {
-                button.setText("Натисніть ще раз, щоб підтвердити");
-                button.getStyleClass().add("danger");
-                waiting.playFromStart();
-            }
-        });
-    }
-
-    // ---------- Допоміжне ----------
 
     private void refreshCacheSize() {
         ImageCache.diskSize().thenAccept(bytes ->
@@ -171,13 +114,60 @@ public final class SettingsScreen implements Screen {
         return box;
     }
 
-    @Override
-    public Parent view() {
-        return root;
+    // ---------- Допоміжне ----------
+
+    private static String formatSize(long bytes) {
+        return String.format(Locale.forLanguageTag("uk"), "%.1f МБ", bytes / 1024.0 / 1024.0);
     }
 
-    @Override
-    public Node initialFocus() {
-        return clearCache;
+    /** Офіційний логотип TMDB з ресурсів, якщо файл додано в проєкт. */
+    private static Optional<ImageView> tmdbLogo() {
+        var url = SettingsScreen.class.getResource(TMDB_LOGO);
+        if (url == null) {
+            System.err.println("Немає " + TMDB_LOGO + " — додайте офіційний логотип TMDB (див. README)");
+            return Optional.empty();
+        }
+        // Ширина 0 = рахується автоматично за пропорціями
+        return Optional.of(new ImageView(new Image(url.toExternalForm(), 0, TMDB_LOGO_HEIGHT, true, true)));
+    }
+
+    private static VBox section(String heading, Node... content) {
+        var label = new Label(heading);
+        label.getStyleClass().add("settings-heading");
+        var box = new VBox(10, label);
+        box.getChildren().addAll(content);
+        return box;
+    }
+
+    private static Button settingsButton(String text) {
+        var button = FocusZoom.install(new Button(text), 1.04);
+        button.getStyleClass().setAll("secondary-button");
+        return button;
+    }
+
+    /**
+     * Небезпечна дія з підтвердженням: перше натискання лише просить підтвердити,
+     * друге протягом 3 секунд — виконує. Діалогові вікна з геймпадом незручні.
+     */
+    private static void confirmTwice(Button button, Runnable action) {
+        String original = button.getText();
+        var waiting = new PauseTransition(Duration.seconds(3));
+        Runnable reset = () -> {
+            button.setText(original);
+            button.getStyleClass().remove("danger");
+        };
+        waiting.setOnFinished(e -> reset.run());
+
+        button.setOnAction(e -> {
+            if (waiting.getStatus() == Animation.Status.RUNNING) {
+                waiting.stop();
+                reset.run();
+                action.run();
+            } else {
+                button.setText("Натисніть ще раз, щоб підтвердити");
+                button.getStyleClass().add("danger");
+                waiting.playFromStart();
+            }
+        });
     }
 }

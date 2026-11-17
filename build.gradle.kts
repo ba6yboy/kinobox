@@ -86,7 +86,7 @@ val jpackageDir = layout.buildDirectory.dir("jpackage")
 val jdkTools = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
 
 /** Вхідні файли: застосунок і бібліотеки — в корінь (class path), JavaFX — у теку javafx (module path). */
-val packageInput by tasks.registering(Sync::class) {
+val packageInput = tasks.register<Sync>("packageInput") {
     group = "distribution"
     description = "Готує jar-файли для jpackage"
     into(jpackageDir.map { it.dir("input") })
@@ -101,7 +101,7 @@ val packageInput by tasks.registering(Sync::class) {
 }
 
 /** build/jpackage/image/KinoBox — тека з KinoBox.exe і вбудованою Java. WiX не потрібен. */
-val appImage by tasks.registering(Exec::class) {
+val appImage = tasks.register<Exec>("appImage") {
     group = "distribution"
     description = "Створює KinoBox.exe з вбудованою Java (без інсталятора)"
     dependsOn(packageInput)
@@ -114,7 +114,7 @@ val appImage by tasks.registering(Exec::class) {
         "--type", "app-image",
         "--name", "KinoBox",
         "--app-version", version.toString(),
-        "--vendor", "KinoBox",
+        "--vendor", "ba6yboy",
         "--icon", file("src/packaging/kinobox.ico").absolutePath,
         "--input", jpackageDir.get().dir("input").asFile.absolutePath,
         "--main-jar", tasks.jar.get().archiveFileName.get(),
@@ -130,11 +130,42 @@ val appImage by tasks.registering(Exec::class) {
 }
 
 /** build/jpackage/KinoBox-<версія>-windows.zip — портативна версія: розпакував і запустив. */
-val portableZip by tasks.registering(Zip::class) {
+val portableZip = tasks.register<Zip>("portableZip") {
     group = "distribution"
     description = "Архів з KinoBox для запуску без встановлення"
     dependsOn(appImage)
     from(jpackageDir.map { it.dir("image") })
     archiveFileName = "KinoBox-$version-windows.zip"
     destinationDirectory = jpackageDir
+}
+
+/** build/jpackage/installer/KinoBox-<версія>.exe — інсталятор. Потрібен WiX Toolset. */
+val installer = tasks.register<Exec>("installer") {
+    group = "distribution"
+    description = "Створює інсталятор KinoBox для Windows (потрібен WiX Toolset)"
+    dependsOn(appImage)
+    val output = jpackageDir.map { it.dir("installer") }
+    doFirst {
+        delete(output)
+        executable = jdkTools.get().metadata.installationPath.file("bin/jpackage").asFile.absolutePath
+    }
+    args(
+        "--type", "exe",
+        // Беремо вже зібраний і перевірений образ — той самий KinoBox.exe, що працює зараз
+        "--app-image", jpackageDir.get().dir("image/KinoBox").asFile.absolutePath,
+        "--name", "KinoBox",
+        "--app-version", version.toString(),
+        "--vendor", "ba6yboy",
+        // Лише латиниця: WiX 3 за замовчуванням пише інсталятор у кодуванні без кирилиці
+        "--description", "KinoBox - movies and series with DualSense",
+        "--dest", output.get().asFile.absolutePath,
+        "--win-menu",                      // ярлик у меню «Пуск»
+        "--win-menu-group", "KinoBox",     // … у групі KinoBox
+        "--win-shortcut",                  // ярлик на робочому столі
+        "--win-dir-chooser",               // дати вибрати теку встановлення
+        "--win-per-user-install",          // для поточного користувача, без прав адміністратора
+        // Постійний ідентифікатор продукту: нова версія замінює стару, а не ставиться поруч.
+        // НЕ змінюйте його в майбутніх версіях.
+        "--win-upgrade-uuid", "3d5e8a2c-7b14-4f9e-a6c1-52e09b8d7f43",
+    )
 }

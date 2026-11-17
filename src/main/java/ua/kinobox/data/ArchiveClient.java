@@ -12,11 +12,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -27,9 +29,17 @@ public final class ArchiveClient {
 
     private static final URI BASE = URI.create("https://archive.org/");
     private static final ObjectMapper JSON = new ObjectMapper();
-    /** Колекція повнометражних фільмів з відкритим статусом. Шукаємо лише тут. */
+    /** Колекція повнометражних фільмів. Шукаємо лише тут. */
     private static final String COLLECTION = "feature_films";
     private static final List<String> VIDEO_EXTENSIONS = List.of(".mp4", ".m4v", ".mkv", ".ogv", ".avi", ".mpeg", ".mpg");
+
+    /**
+     * Додатковий фільтр: старі фільми (переважно суспільне надбання) або явна ліцензія Creative Commons.
+     * Колекція курується не повністю, тож новіші фільми без відкритої ліцензії не показуємо.
+     */
+    private static final String OPEN_ONLY = "(year:[1890 TO 1965] OR licenseurl:(*creativecommons*))";
+    /** Ідентифікатор елемента archive.org. Інше (зокрема «..») в адресу запиту не підставляємо. */
+    private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,99}");
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -45,7 +55,8 @@ public final class ArchiveClient {
         if (words.isEmpty()) {
             return CompletableFuture.completedFuture(Optional.empty());
         }
-        String query = "collection:(" + COLLECTION + ") AND mediatype:(movies) AND title:(" + words + ")"
+        String query = "collection:(" + COLLECTION + ") AND mediatype:(movies) AND " + OPEN_ONLY
+                + " AND title:(" + words + ")"
                 + (year > 0 ? " AND year:[" + (year - 1) + " TO " + (year + 1) + "]" : "");
         String path = "advancedsearch.php?q=" + encode(query)
                 + "&fl%5B%5D=identifier&rows=1&sort%5B%5D=downloads+desc&output=json";
@@ -53,7 +64,28 @@ public final class ArchiveClient {
             JsonNode docs = read(json).path("response").path("docs");
             return docs.isEmpty()
                     ? Optional.<String>empty()
-                    : Optional.of(docs.get(0).path("identifier").asText());
+                    : Optional.of(docs.get(0).path("identifier").asText()).filter(ArchiveClient::isIdentifier);
+        });
+    }
+
+    /** Найпопулярніші фільми колекції — за кількістю переглядів за весь час. */
+    public CompletableFuture<List<Film>> popularFeatureFilms(int count) {
+        String query = "collection:(" + COLLECTION + ") AND mediatype:(movies) AND " + OPEN_ONLY;
+        String path = "advancedsearch.php?q=" + encode(query)
+                + "&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=year"
+                + "&rows=" + count + "&sort%5B%5D=downloads+desc&output=json";
+        return get(path).thenApply(json -> {
+            var films = new ArrayList<Film>();
+            for (JsonNode doc : read(json).path("response").path("docs")) {
+                if (!isIdentifier(doc.path("identifier").asText())) {
+                    continue;
+                }
+                films.add(new Film(
+                        doc.path("identifier").asText(),
+                        doc.path("title").asText(""),
+                        doc.path("year").asInt(0))); // рік у відповіді — рядок; asInt його розбере
+            }
+            return List.copyOf(films);
         });
     }
 
@@ -101,6 +133,10 @@ public final class ArchiveClient {
         });
     }
 
+    private static boolean isIdentifier(String value) {
+        return IDENTIFIER.matcher(value).matches();
+    }
+
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
@@ -116,5 +152,9 @@ public final class ArchiveClient {
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** Фільм з колекції: ідентифікатор на archive.org, назва і рік (0 — невідомий). */
+    public record Film(String identifier, String title, int year) {
     }
 }

@@ -5,12 +5,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.UncheckedIOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 
 /**
  * Вміст вашої медіатеки Jellyfin, зіставлений з каталогом TMDB.
@@ -19,8 +20,11 @@ import java.util.List;
 public final class JellyfinLibrary {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    /** TMDB-номер — лише цифри. Інше (порожнє, зіпсоване) не зіставляємо: воно потрапило б у шлях запиту до TMDB. */
+    private static final Pattern TMDB_NUMBER = Pattern.compile("\\d{1,10}");
 
     private final JellyfinClient client;
+    /** Id користувача, від імені якого читаємо медіатеку. Запитуємо один раз. */
     private CompletableFuture<String> userId;
 
     public JellyfinLibrary(JellyfinClient client) {
@@ -36,21 +40,14 @@ public final class JellyfinLibrary {
      * Елементи без TMDB-номера пропускаються — їх неможливо зіставити з каталогом.
      */
     public CompletableFuture<Map<String, String>> loadIndex() {
-        return userId()
-                .thenCompose(user -> client.get("Items", Map.of(
-                        "userId", user,
-                        "Recursive", "true",
-                        "IncludeItemTypes", "Movie,Series",
-                        "Fields", "ProviderIds")))
+        return items(Map.of(
+                "Recursive", "true",
+                "IncludeItemTypes", "Movie,Series",
+                "Fields", "ProviderIds"))
                 .thenApply(json -> {
                     var index = new HashMap<String, String>();
                     for (JsonNode item : read(json).path("Items")) {
-                        String tmdb = item.path("ProviderIds").path("Tmdb").asText("");
-                        if (tmdb.isBlank()) {
-                            continue;
-                        }
-                        String prefix = "Series".equals(item.path("Type").asText()) ? "tv:" : "movie:";
-                        index.put(prefix + tmdb, item.path("Id").asText());
+                        catalogId(item).ifPresent(id -> index.put(id, item.path("Id").asText()));
                     }
                     return Map.copyOf(index);
                 });
@@ -58,19 +55,17 @@ public final class JellyfinLibrary {
 
     /** Епізоди серіалу в медіатеці: "s1e2" → id елемента в Jellyfin. */
     public CompletableFuture<Map<String, String>> episodes(String seriesItemId) {
-        return userId()
-                .thenCompose(user -> client.get("Items", Map.of(
-                        "userId", user,
-                        "parentId", seriesItemId,
-                        "Recursive", "true",
-                        "IncludeItemTypes", "Episode")))
+        return items(Map.of(
+                "parentId", seriesItemId,
+                "Recursive", "true",
+                "IncludeItemTypes", "Episode"))
                 .thenApply(json -> {
                     var index = new HashMap<String, String>();
                     for (JsonNode item : read(json).path("Items")) {
                         int season = item.path("ParentIndexNumber").asInt(-1);
                         int episode = item.path("IndexNumber").asInt(-1);
                         if (season >= 0 && episode >= 0) { // файли без номерів зіставити неможливо
-                            index.put("s" + season + "e" + episode, item.path("Id").asText());
+                            index.put(new EpisodeRef(season, episode).code(), item.path("Id").asText());
                         }
                     }
                     return Map.copyOf(index);
@@ -79,23 +74,17 @@ public final class JellyfinLibrary {
 
     /** Нещодавно додані фільми й серіали: id тайтлів ("movie:603", "tv:1399"), новіші першими. */
     public CompletableFuture<List<String>> recentlyAdded(int limit) {
-        return userId()
-                .thenCompose(user -> client.get("Items", Map.of(
-                        "userId", user,
-                        "Recursive", "true",
-                        "IncludeItemTypes", "Movie,Series",
-                        "Fields", "ProviderIds",
-                        "SortBy", "DateCreated",
-                        "SortOrder", "Descending",
-                        "Limit", String.valueOf(limit))))
+        return items(Map.of(
+                "Recursive", "true",
+                "IncludeItemTypes", "Movie,Series",
+                "Fields", "ProviderIds",
+                "SortBy", "DateCreated",
+                "SortOrder", "Descending",
+                "Limit", String.valueOf(limit)))
                 .thenApply(json -> {
                     var ids = new ArrayList<String>();
                     for (JsonNode item : read(json).path("Items")) {
-                        String tmdb = item.path("ProviderIds").path("Tmdb").asText("");
-                        if (!tmdb.isBlank()) {
-                            String prefix = "Series".equals(item.path("Type").asText()) ? "tv:" : "movie:";
-                            ids.add(prefix + tmdb);
-                        }
+                        catalogId(item).ifPresent(ids::add);
                     }
                     return List.copyOf(ids);
                 });
@@ -103,7 +92,7 @@ public final class JellyfinLibrary {
 
     /**
      * Від чийого імені дивимося медіатеку: адміністратор, а якщо його немає — перший користувач.
-     * Запитуємо один раз і запам'ятовуємо.
+     * Невдалий запит не запам'ятовуємо: наступного разу спробуємо знову.
      */
     synchronized CompletableFuture<String> userId() {
         if (userId == null || userId.isCompletedExceptionally()) {
@@ -124,6 +113,25 @@ public final class JellyfinLibrary {
             });
         }
         return userId;
+    }
+
+    /** GET /Items від імені користувача (без userId сервер повертає порожній список). */
+    private CompletableFuture<String> items(Map<String, String> params) {
+        return userId().thenCompose(user -> {
+            var withUser = new HashMap<>(params);
+            withUser.put("userId", user);
+            return client.get("Items", withUser);
+        });
+    }
+
+    /** Наш id тайтлу за TMDB-номером елемента: "movie:603" або "tv:1399". */
+    private static Optional<String> catalogId(JsonNode item) {
+        String tmdb = item.path("ProviderIds").path("Tmdb").asText("");
+        if (!TMDB_NUMBER.matcher(tmdb).matches()) {
+            return Optional.empty();
+        }
+        String prefix = "Series".equals(item.path("Type").asText()) ? "tv:" : "movie:";
+        return Optional.of(prefix + tmdb);
     }
 
     private static JsonNode read(String json) {

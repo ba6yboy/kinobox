@@ -1,18 +1,17 @@
 package ua.kinobox.nav;
 
+import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.Parent;
+import javafx.scene.Scene;
 import ua.kinobox.input.Command;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
-
-import javafx.application.Platform;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.scene.Scene;
 
 /**
  * Просторова навігація як на Smart TV: фокус переходить до найближчого
@@ -22,13 +21,9 @@ import javafx.scene.Scene;
  */
 public final class SpatialNavigator {
 
-    /**
-     * Наскільки сильніше штрафуємо зсув упоперек напрямку руху, ніж відстань уздовж нього.
-     */
+    /** Наскільки сильніше штрафуємо зсув упоперек напрямку руху, ніж відстань уздовж нього. */
     static final double ORTHOGONAL_WEIGHT = 2.5;
-    /**
-     * Допуск на перекриття (масштабовані картки трохи заходять одна на одну).
-     */
+    /** Допуск на перекриття (масштабовані картки трохи заходять одна на одну). */
     static final double OVERLAP_TOLERANCE = 4.0;
 
     private SpatialNavigator() {
@@ -80,6 +75,7 @@ public final class SpatialNavigator {
         return candidates.isEmpty() ? null : candidates.getFirst();
     }
 
+    /** Фокус на вузол і прокрутка до нього. Якщо вузол ще не на сцені — зробимо це, щойно він там з'явиться. */
     public static void focus(Node node) {
         if (node.getScene() == null) {
             // Вузол ще не на екрані: наприклад, картка всередині ScrollPane, який не встиг відмалюватися.

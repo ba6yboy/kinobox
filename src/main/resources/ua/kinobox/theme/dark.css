@@ -201,12 +201,6 @@
     -fx-border-color: white;
 }
 
-.section-title {
-    -fx-font-size: 22px;
-    -fx-font-weight: bold;
-    -fx-padding: 22 0 0 0;
-}
-
 .episodes-scroll .row-cards {
     -fx-padding: 16 64 18 6;
 }
@@ -242,11 +236,6 @@
     -fx-text-fill: white;
     -fx-font-size: 18px;
     -fx-padding: 12 26 12 26;
-}
-
-.hint-bar {
-    -fx-text-fill: #7d7d84;
-    -fx-font-size: 15px;
 }
 
 /* ---------- Плеєр ---------- */
@@ -307,12 +296,6 @@
 .player-side-title {
     -fx-font-size: 28px;
     -fx-font-weight: bold;
-}
-
-.player-side-caption {
-    -fx-text-fill: #9a9aa0;
-    -fx-font-size: 16px;
-    -fx-padding: 16 0 0 0;
 }
 
 .player-episode {

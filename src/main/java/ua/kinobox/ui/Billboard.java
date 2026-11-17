@@ -4,7 +4,11 @@ import javafx.animation.FadeTransition;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
-import javafx.scene.layout.*;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import ua.kinobox.data.Title;
 
@@ -54,20 +58,17 @@ public final class Billboard {
         info.setMouseTransparent(true);
     }
 
-    /**
-     * Фон на весь екран.
-     */
+    /** Фон на весь екран. */
     public StackPane art() {
         return art;
     }
 
-    /**
-     * Текстовий блок над рядами карток.
-     */
+    /** Текстовий блок над рядами карток. */
     public VBox info() {
         return info;
     }
 
+    /** Показати тайтл. Повторний виклик з тим самим тайтлом нічого не робить. */
     public void show(Title t) {
         if (t == null || t.equals(shown)) {
             return;
@@ -98,15 +99,10 @@ public final class Billboard {
             });
         }
 
-        info.setOpacity(0.25);
-        var infoFade = new FadeTransition(Duration.millis(220), info);
-        infoFade.setToValue(1);
-        infoFade.play();
+        fadeInInfo();
     }
 
-    /**
-     * Банер без тайтлу: власний заголовок і текст на фірмовому фоні (порожні розділи тощо).
-     */
+    /** Банер без тайтлу: власний заголовок і текст на фірмовому фоні (порожні розділи тощо). */
     public void showMessage(String title, String text) {
         // Скидаємо поточний тайтл: тоді наступний show(t) спрацює навіть для того самого тайтлу,
         // а картинка, що ще вантажиться для попереднього, вже не підмінить цей фон
@@ -120,16 +116,18 @@ public final class Billboard {
         overview.setText(text);
 
         fadeTo(Artwork.brandBackground());
-
-        info.setOpacity(0.25);
-        var infoFade = new FadeTransition(Duration.millis(220), info);
-        infoFade.setToValue(1);
-        infoFade.play();
+        fadeInInfo();
     }
 
-    /**
-     * Перехресне згасання: старий фон іде назад, новий проявляється поверх.
-     */
+    /** Текст проявляється заново — помітно, що опис змінився. */
+    private void fadeInInfo() {
+        info.setOpacity(0.25);
+        var fade = new FadeTransition(Duration.millis(220), info);
+        fade.setToValue(1);
+        fade.play();
+    }
+
+    /** Перехресне згасання: старий фон іде назад, новий проявляється поверх. */
     private void fadeTo(Background background) {
         artBack.setBackground(artFront.getBackground());
         artFront.setBackground(background);

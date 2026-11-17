@@ -1,12 +1,15 @@
 package ua.kinobox.data;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
-/**
- * Вигадані дані для розробки UI без мережі.
- */
+/** Вигадані дані: застосунок працює без токена TMDB і без мережі. */
 public final class MockCatalogService implements CatalogService {
 
     private static final String[] ADJ = {
@@ -40,19 +43,6 @@ public final class MockCatalogService implements CatalogService {
             result.add(new CatalogRow(rowTitle, List.copyOf(items)));
         }
         this.rows = List.copyOf(result);
-    }
-
-    private static Title randomTitle(Random rnd, String id) {
-        String name = ADJ[rnd.nextInt(ADJ.length)] + " " + NOUN[rnd.nextInt(NOUN.length)];
-        var kind = rnd.nextBoolean() ? Title.Kind.MOVIE : Title.Kind.SERIES;
-        var genres = List.of(GENRES[rnd.nextInt(GENRES.length)], GENRES[rnd.nextInt(GENRES.length)])
-                .stream().distinct().toList();
-        double rating = Math.round((5.5 + rnd.nextDouble() * 4.0) * 10) / 10.0;
-        String overview = "Коли " + NOUN[rnd.nextInt(NOUN.length)] + " приховує більше, ніж здається, "
-                + "героям доведеться вирішити, кому довіряти. Історія про вибір, ціну правди "
-                + "і людей, які не здаються навіть тоді, коли все проти них.";
-        return new Title(id, name, kind, 1995 + rnd.nextInt(31), genres, rating, overview,
-                null, null, rnd.nextDouble() * 360, name);
     }
 
     @Override
@@ -110,5 +100,18 @@ public final class MockCatalogService implements CatalogService {
                 .flatMap(row -> row.items().stream())
                 .filter(t -> t.id().equals(id))
                 .findFirst());
+    }
+
+    private static Title randomTitle(Random rnd, String id) {
+        String name = ADJ[rnd.nextInt(ADJ.length)] + " " + NOUN[rnd.nextInt(NOUN.length)];
+        var kind = rnd.nextBoolean() ? Title.Kind.MOVIE : Title.Kind.SERIES;
+        var genres = Stream.of(GENRES[rnd.nextInt(GENRES.length)], GENRES[rnd.nextInt(GENRES.length)])
+                .distinct().toList();
+        double rating = Math.round((5.5 + rnd.nextDouble() * 4.0) * 10) / 10.0;
+        String overview = "Коли " + NOUN[rnd.nextInt(NOUN.length)] + " приховує більше, ніж здається, "
+                + "героям доведеться вирішити, кому довіряти. Історія про вибір, ціну правди "
+                + "і людей, які не здаються навіть тоді, коли все проти них.";
+        return new Title(id, name, kind, 1995 + rnd.nextInt(31), genres, rating, overview,
+                null, null, rnd.nextDouble() * 360, name);
     }
 }

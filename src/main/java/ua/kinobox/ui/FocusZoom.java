@@ -4,9 +4,7 @@ import javafx.animation.ScaleTransition;
 import javafx.scene.Node;
 import javafx.util.Duration;
 
-/**
- * Плавне збільшення елемента у фокусі — головний візуальний сигнал для керування з дивана.
- */
+/** Плавне збільшення елемента у фокусі — головний візуальний сигнал для керування з дивана. */
 public final class FocusZoom {
 
     private FocusZoom() {

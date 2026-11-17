@@ -1,13 +1,17 @@
 package ua.kinobox.data;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Фільм або серіал у каталозі.
  *
- * @param posterUrl   URL постера; {@code null}, поки немає реального джерела (тоді малюється заглушка)
- * @param backdropUrl URL широкого фонового зображення для hero-банера
- * @param accentHue   відтінок (0–360) для кольорової заглушки постера
+ * @param id           унікальний id: "movie:603", "tv:1399" (для демо-даних — "t0", "t1"…)
+ * @param year         рік виходу; 0 — невідомо
+ * @param posterUrl    URL постера; {@code null} — немає (тоді малюється заглушка)
+ * @param backdropUrl  URL широкого фонового зображення для банера і карток
+ * @param accentHue    відтінок (0–360) для кольорової заглушки
+ * @param originalName назва мовою оригіналу (для пошуку в Internet Archive)
  */
 public record Title(
         String id,
@@ -22,6 +26,16 @@ public record Title(
         double accentHue,
         String originalName
 ) {
+
+    /** Тайтли читаються й з JSON-файлів користувача, тож відсутні поля замінюємо безпечними значеннями. */
+    public Title {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(kind, "kind");
+        name = Objects.requireNonNullElse(name, "");
+        genres = genres == null ? List.of() : genres.stream().filter(Objects::nonNull).toList();
+        overview = Objects.requireNonNullElse(overview, "");
+    }
+
     public String kindLabel() {
         return kind == Kind.MOVIE ? "Фільм" : "Серіал";
     }
@@ -32,5 +46,5 @@ public record Title(
                 originalName);
     }
 
-    public enum Kind {MOVIE, SERIES}
+    public enum Kind { MOVIE, SERIES }
 }

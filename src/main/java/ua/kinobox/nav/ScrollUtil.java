@@ -8,6 +8,7 @@ import javafx.beans.property.DoubleProperty;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.Region;
 import javafx.util.Duration;
 
 /**
@@ -18,14 +19,10 @@ public final class ScrollUtil {
     private static final Duration ANIMATION = Duration.millis(220);
     private static final String TIMELINE_KEY = "kinobox.scroll.timeline.";
     private static final String SNAP_START_KEY = "kinobox.scroll.snapStart";
-    /**
-     * Відступ від краю в'юпорту, щоб збільшена картка і сусіди лишалися видимими.
-     */
+    /** Відступ від краю в'юпорту, щоб збільшена картка і сусіди лишалися видимими. */
     private static final double MARGIN_X = 60;
     private static final double MARGIN_Y = 90;
-    /**
-     * Відступ над рядом у режимі snapToStart — місце для назви ряду.
-     */
+    /** Відступ над рядом у режимі snapToStart — місце для назви ряду. */
     private static final double SNAP_MARGIN_Y = 56;
 
     private ScrollUtil() {
@@ -57,6 +54,11 @@ public final class ScrollUtil {
         if (!sp.isFitToWidth()) {
             double target = offset(sp.getHvalue(), contentBounds.getWidth(), viewport.getWidth(),
                     inContent.getMinX(), inContent.getMaxX(), MARGIN_X, false);
+            // Перша картка ряду — прокручуємо до самого початку. Інакше запас MARGIN_X
+            // лишає ряд зсунутим лівіше за його звичайне положення (відступ контейнера більший за запас).
+            if (atContentStart(content, inContent.getMinX())) {
+                target = 0;
+            }
             animate(sp, sp.hvalueProperty(), target, "h");
         }
         if (!sp.isFitToHeight()) {
@@ -100,5 +102,11 @@ public final class ScrollUtil {
                 new KeyValue(property, target, Interpolator.EASE_OUT)));
         sp.getProperties().put(TIMELINE_KEY + axis, timeline);
         timeline.play();
+    }
+
+    /** Чи вузол на самому початку вмісту: перед ним лише внутрішній відступ (padding) контейнера. */
+    private static boolean atContentStart(Node content, double minX) {
+        double inset = content instanceof Region region ? region.snappedLeftInset() : 0;
+        return minX <= inset + 1; // +1 — запас на округлення координат
     }
 }

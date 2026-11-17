@@ -1,6 +1,11 @@
 package ua.kinobox.ui;
 
-import javafx.animation.*;
+import javafx.animation.FadeTransition;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.PauseTransition;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
@@ -31,11 +36,9 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
-import javafx.geometry.Insets;
-
 /**
  * Відеоплеєр на vlcj (libVLC) з двома режимами, як у Netflix:
- * повний (відео на весь екран) і компактний (відео зменшене, праворуч — серії).
+ * повний (відео на весь екран) і компактний (відео зменшене, праворуч — панель дій).
  *
  * <pre>
  * Повний режим:
@@ -43,6 +46,7 @@ import javafx.geometry.Insets;
  *   ← / →              −10 / +10 секунд
  *   L1,L2 / R1,R2      −30 / +30 секунд
  *   □ / F / F11        компактний режим
+ *   Options / M        аудіодоріжки й субтитри
  *   ○ / Esc            закрити плеєр
  * Компактний режим:
  *   стрілки, ✕         навігація по панелі та вибір
@@ -53,18 +57,24 @@ public final class PlayerScreen implements Screen {
 
     private static final long SHORT_SEEK_MS = 10_000;
     private static final long LONG_SEEK_MS = 30_000;
-    /**
-     * Як часто зберігати позицію під час перегляду.
-     */
+    /** Як часто зберігати позицію під час перегляду. */
     private static final long AUTOSAVE_INTERVAL_MS = 10_000;
-    /**
-     * Яку частку ширини екрана займає відео в компактному режимі.
-     */
+    /** Яку частку ширини екрана займає відео в компактному режимі. */
     private static final double COMPACT_VIDEO_SHARE = 0.62;
-    /**
-     * Опції libVLC. --quiet вимикає технічні повідомлення VLC у консолі.
-     */
+    /** Скільки секунд чекати перед автозапуском наступної серії. */
+    private static final int NEXT_COUNTDOWN_SECONDS = 10;
+    /** Опції libVLC. --quiet вимикає технічні повідомлення VLC у консолі. */
     private static final String[] VLC_OPTIONS = {"--quiet"};
+
+    private final Title title;
+    /** Адреса відео. Може містити API-ключ, тому її ніде не показуємо і не пишемо в лог. */
+    private final String source;
+    /** Під яким ключем зберігати позицію (id тайтлу або серії) — не адреса відео. */
+    private final String progressKey;
+    private final ProgressStore progressStore;
+    private final Consumer<String> notify;
+    /** Наступна серія або null (фільм, остання серія). */
+    private final Next next;
 
     private final StackPane root = new StackPane();
     private final StackPane videoBox = new StackPane();
@@ -72,48 +82,27 @@ public final class PlayerScreen implements Screen {
     private final VBox overlay = new VBox(14);
     private final VBox side = new VBox(16);
     private final HBox tracksMenu = new HBox(48);
+    private final VBox nextPanel = new VBox(6);
     private final Label stateIcon = new Label();
     private final ProgressBar progress = new ProgressBar(0);
     private final Label time = new Label("0:00 / 0:00");
+    private final Label nextCountdown = new Label();
     private final PauseTransition hideTimer = new PauseTransition(Duration.seconds(3));
-    /**
-     * Частка ширини під відео: 1.0 — повний режим, COMPACT_VIDEO_SHARE — компактний.
-     */
+    /** Частка ширини під відео: 1.0 — повний режим, COMPACT_VIDEO_SHARE — компактний. */
     private final DoubleProperty videoShare = new SimpleDoubleProperty(1.0);
-
-    private final Title title;
-    private final String source;
-    /** Під яким ключем зберігати позицію (id тайтлу). Не адреса відео: у ній може бути API-ключ. */
-    private final String progressKey;
-    private final ProgressStore progressStore;
-    private final Consumer<String> notify;
-
-    /** Скільки секунд чекати перед автозапуском наступної серії. */
-    private static final int NEXT_COUNTDOWN_SECONDS = 10;
-
-    /** Що вмикати після цієї серії: підпис для картки і дія. */
-    public record Next(String label, Runnable play) {
-    }
 
     private MediaPlayerFactory factory;
     private EmbeddedMediaPlayer player;
     private boolean compact;
-    private Timeline modeAnimation;
-    private Node firstSideAction;
     private boolean tracksOpen;
-    private long lastSavedMs;
-    /**
-     * Куди перемотати, коли відео почне грати; −1 — нікуди. volatile: читається з потоку VLC.
-     */
-    private volatile long resumeAtMs = -1;
-
-    /** Наступна серія або null (фільм, остання серія). */
-    private final Next next;
-    private final VBox nextPanel = new VBox(6);
-    private final Label nextCountdown = new Label();
+    private boolean nextShown;
+    private Timeline modeAnimation;
     private Timeline nextTimer;
     private int nextSecondsLeft;
-    private boolean nextShown;
+    private Node firstSideAction;
+    private long lastSavedMs;
+    /** Куди перемотати, коли відео почне грати; −1 — нікуди. volatile: читається з потоку VLC. */
+    private volatile long resumeAtMs = -1;
 
     public PlayerScreen(Title title, String source, String progressKey, ProgressStore progressStore,
                         Consumer<String> notify, Next next) {
@@ -132,16 +121,9 @@ public final class PlayerScreen implements Screen {
         video.setPreserveRatio(true);
         video.fitWidthProperty().bind(videoBox.widthProperty());
         video.fitHeightProperty().bind(videoBox.heightProperty());
-        videoBox.getChildren().addAll(video, buildOverlay());
-        // Меню доріжок лежить поверх відео, праворуч; на старті сховане
-        tracksMenu.getStyleClass().add("player-tracks");
-        tracksMenu.setMaxSize(HBox.USE_PREF_SIZE, HBox.USE_PREF_SIZE);
-        tracksMenu.setVisible(false);
-        StackPane.setAlignment(tracksMenu, Pos.CENTER_RIGHT);
-        StackPane.setMargin(tracksMenu, new Insets(0, 60, 0, 0));
-        videoBox.getChildren().add(tracksMenu);
+        videoBox.getChildren().addAll(video, buildOverlay(), buildTracksMenu());
         if (next != null) {
-            buildNextPanel();
+            videoBox.getChildren().add(buildNextPanel());
         }
         videoBox.setMinSize(0, 0);
         videoBox.prefWidthProperty().bind(root.widthProperty().multiply(videoShare));
@@ -156,19 +138,7 @@ public final class PlayerScreen implements Screen {
         hideTimer.setOnFinished(e -> fadeOverlay(false));
     }
 
-    /**
-     * Зрозуміла назва доріжки: VLC інколи віддає порожній опис.
-     */
-    private static String trackName(TrackDescription track) {
-        if (track.id() < 0) {
-            return "Вимкнено";
-        }
-        String text = track.description();
-        return text == null || text.isBlank() ? "Доріжка " + track.id() : text;
-    }
-
-    // ---------- Бокова панель (компактний режим) ----------
-
+    /** «1:02:03» або «2:03». */
     static String format(long ms) {
         long total = Math.max(0, ms) / 1000;
         long h = total / 3600;
@@ -176,6 +146,117 @@ public final class PlayerScreen implements Screen {
         long s = total % 60;
         return h > 0 ? String.format("%d:%02d:%02d", h, m, s) : String.format("%d:%02d", m, s);
     }
+
+    // ---------- Screen ----------
+
+    @Override
+    public Parent view() {
+        return root;
+    }
+
+    @Override
+    public Node initialFocus() {
+        return root;
+    }
+
+    @Override
+    public void onShown() {
+        try {
+            factory = new MediaPlayerFactory(VLC_OPTIONS);
+        } catch (RuntimeException | LinkageError e) {
+            // Найчастіша причина — не встановлено VLC або встановлено 32-бітну версію
+            notify.accept("Не знайдено VLC 3.x (64-bit). Встановіть його з videolan.org");
+            return;
+        }
+        // 1. Спершу створюємо плеєр і підключаємо до нього ImageView та події
+        player = factory.mediaPlayers().newEmbeddedMediaPlayer();
+        player.videoSurface().set(new ImageViewVideoSurface(video));
+        player.events().addMediaPlayerEventListener(new PlayerEvents());
+
+        // 2. Потім вирішуємо, звідки почати
+        var saved = progressStore.position(progressKey);
+        if (saved.isPresent()) {
+            resumeAtMs = saved.getAsLong(); // перемотаємо в timeChanged, щойно файл стане seekable
+            notify.accept("Продовжуємо з " + format(resumeAtMs) + "     {S} — почати спочатку");
+        }
+
+        // 3. І лише тепер запускаємо відтворення — рівно один раз
+        player.media().play(source);
+        showOverlay();
+    }
+
+    @Override
+    public void onHidden() {
+        if (nextTimer != null) {
+            nextTimer.stop(); // плеєр закрили посеред відліку — наступна серія не повинна ввімкнутися сама
+        }
+        hideTimer.stop();
+        if (modeAnimation != null) {
+            modeAnimation.stop();
+        }
+        if (player != null) {
+            // Перемотка на збережену позицію ще не відбулась — поточний час ≈ 0, ним не можна перезаписувати прогрес
+            if (resumeAtMs < 0) {
+                progressStore.save(progressKey, player.status().time(), player.status().length());
+            }
+            player.controls().stop();
+            player.release();
+            factory.release();
+            player = null;
+        }
+    }
+
+    @Override
+    public boolean handle(Command command) {
+        showOverlay();
+        if (player == null) {
+            return false; // VLC не запустився — дозволяємо лише вийти
+        }
+        if (nextShown) {
+            switch (command) {
+                case ACCEPT -> playNext();      // ✕ — дивитися зараз
+                case BACK -> hideNextPanel();   // ○ — скасувати; наступне ○ закриє плеєр
+                default -> { }                  // решту ігноруємо, поки йде відлік
+            }
+            return true;
+        }
+        if (tracksOpen) {
+            if (command == Command.BACK || command == Command.MENU) {
+                closeTracks();
+                return true;
+            }
+            return false; // стрілки й ✕ — навігація по меню доріжок, її робить ScreenManager
+        }
+        if (command == Command.MENU && !compact) {
+            openTracks();
+            return true;
+        }
+        if (command == Command.FULLSCREEN) {
+            setCompact(!compact);
+            return true;
+        }
+        if (compact) {
+            if (command == Command.BACK) {
+                setCompact(false); // ○ у компактному режимі — назад до відео, а не вихід
+                return true;
+            }
+            return false; // стрілки й ✕ віддаємо ScreenManager: він рухає фокус по кнопках панелі
+        }
+        switch (command) {
+            case ACCEPT -> player.controls().setPause(player.status().isPlaying());
+            case LEFT -> seek(-SHORT_SEEK_MS);
+            case RIGHT -> seek(SHORT_SEEK_MS);
+            case PAGE_LEFT -> seek(-LONG_SEEK_MS);
+            case PAGE_RIGHT -> seek(LONG_SEEK_MS);
+            case BACK -> {
+                return false; // ScreenManager закриє екран і викличе onHidden()
+            }
+            default -> { }    // UP, DOWN, SECONDARY — просто показати панель
+        }
+        return true;
+    }
+
+    // ---------- Побудова інтерфейсу ----------
 
     private Node buildOverlay() {
         var name = new Label(title.name());
@@ -201,6 +282,35 @@ public final class PlayerScreen implements Screen {
         return overlay;
     }
 
+    /** Меню доріжок лежить поверх відео, праворуч; на старті сховане. */
+    private Node buildTracksMenu() {
+        tracksMenu.getStyleClass().add("player-tracks");
+        tracksMenu.setMaxSize(HBox.USE_PREF_SIZE, HBox.USE_PREF_SIZE);
+        tracksMenu.setVisible(false);
+        StackPane.setAlignment(tracksMenu, Pos.CENTER_RIGHT);
+        StackPane.setMargin(tracksMenu, new Insets(0, 60, 0, 0));
+        return tracksMenu;
+    }
+
+    /** Картка «Наступна серія» з відліком — над панеллю керування, праворуч. */
+    private Node buildNextPanel() {
+        var caption = new Label("Наступна серія");
+        caption.getStyleClass().add("player-next-caption");
+        var name = new Label(next.label());
+        name.getStyleClass().add("player-next-title");
+        nextCountdown.getStyleClass().add("player-next-count");
+        var help = Glyphs.hint("{X} Дивитися зараз     {O} Скасувати", "player-help");
+
+        nextPanel.getChildren().addAll(caption, name, nextCountdown, help);
+        nextPanel.getStyleClass().add("player-next");
+        nextPanel.setMaxSize(VBox.USE_PREF_SIZE, VBox.USE_PREF_SIZE);
+        nextPanel.setVisible(false);
+        StackPane.setAlignment(nextPanel, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(nextPanel, new Insets(0, 60, 170, 0));
+        return nextPanel;
+    }
+
+    /** Бокова панель компактного режиму. На старті схована і не займає місця в розкладці. */
     private void buildSidePanel() {
         var name = new Label(title.name());
         name.getStyleClass().add("player-side-title");
@@ -212,13 +322,12 @@ public final class PlayerScreen implements Screen {
 
         firstSideAction = resume;
         side.getStyleClass().add("player-side");
-        // На старті панель схована і не займає місця в розкладці
         side.setOpacity(0);
         side.setVisible(false);
         side.setManaged(false);
     }
 
-    private Button sideButton(String text, Runnable action) {
+    private static Button sideButton(String text, Runnable action) {
         var button = new Button(text);
         button.getStyleClass().add("player-episode");
         button.setMaxWidth(Double.MAX_VALUE);
@@ -226,18 +335,9 @@ public final class PlayerScreen implements Screen {
         return button;
     }
 
-    // ---------- Меню аудіодоріжок і субтитрів ----------
+    // ---------- Компактний режим ----------
 
-    private void restart() {
-        resumeAtMs = -1;
-        progressStore.clear(progressKey);
-        player.media().play(source); // play замість setTime(0): спрацює навіть після кінця відео
-        setCompact(false);
-    }
-
-    /**
-     * Плавне перемикання між повним і компактним режимом.
-     */
+    /** Плавне перемикання між повним і компактним режимом. */
     private void setCompact(boolean value) {
         if (compact == value) {
             return;
@@ -272,6 +372,15 @@ public final class PlayerScreen implements Screen {
         showOverlay();
     }
 
+    private void restart() {
+        resumeAtMs = -1;
+        progressStore.clear(progressKey);
+        player.media().play(source); // play замість setTime(0): спрацює навіть після кінця відео
+        setCompact(false);
+    }
+
+    // ---------- Меню аудіодоріжок і субтитрів ----------
+
     private void openTracks() {
         var audio = trackColumn("Аудіо",
                 player.audio().trackDescriptions(),
@@ -287,10 +396,11 @@ public final class PlayerScreen implements Screen {
 
         root.setFocusTraversable(false);
         // Фокус — на поточну аудіодоріжку, а якщо доріжок немає — на першу кнопку меню
-        tracksMenu.lookupAll(".player-track").stream()
+        var buttons = tracksMenu.lookupAll(".player-track");
+        buttons.stream()
                 .filter(n -> n.getStyleClass().contains("active"))
                 .findFirst()
-                .or(() -> tracksMenu.lookupAll(".player-track").stream().findFirst())
+                .or(() -> buttons.stream().findFirst())
                 .ifPresent(Node::requestFocus);
         showOverlay();
     }
@@ -303,59 +413,6 @@ public final class PlayerScreen implements Screen {
         root.requestFocus();
         showOverlay();
     }
-
-    // ---------- Наступна серія ----------
-
-    private void buildNextPanel() {
-        var caption = new Label("Наступна серія");
-        caption.getStyleClass().add("player-next-caption");
-        var name = new Label(next.label());
-        name.getStyleClass().add("player-next-title");
-        nextCountdown.getStyleClass().add("player-next-count");
-        var help = Glyphs.hint("{X} Дивитися зараз     {O} Скасувати", "player-help");
-
-        nextPanel.getChildren().addAll(caption, name, nextCountdown, help);
-        nextPanel.getStyleClass().add("player-next");
-        nextPanel.setMaxSize(VBox.USE_PREF_SIZE, VBox.USE_PREF_SIZE);
-        nextPanel.setVisible(false);
-        StackPane.setAlignment(nextPanel, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(nextPanel, new Insets(0, 60, 170, 0)); // над панеллю керування
-        videoBox.getChildren().add(nextPanel);
-    }
-
-    /** Серія закінчилась: показуємо картку і запускаємо відлік. */
-    private void showNextPanel() {
-        nextShown = true;
-        nextPanel.setVisible(true);
-        nextSecondsLeft = NEXT_COUNTDOWN_SECONDS;
-        nextCountdown.setText("через " + nextSecondsLeft + " с");
-        // Кадр щосекунди, рівно NEXT_COUNTDOWN_SECONDS разів
-        nextTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> {
-            nextSecondsLeft--;
-            if (nextSecondsLeft <= 0) {
-                playNext();
-            } else {
-                nextCountdown.setText("через " + nextSecondsLeft + " с");
-            }
-        }));
-        nextTimer.setCycleCount(NEXT_COUNTDOWN_SECONDS);
-        nextTimer.play();
-    }
-
-    private void hideNextPanel() {
-        nextShown = false;
-        nextPanel.setVisible(false);
-        if (nextTimer != null) {
-            nextTimer.stop();
-        }
-    }
-
-    private void playNext() {
-        hideNextPanel();
-        next.play().run(); // застосунок закриє цей плеєр і відкриє наступну серію
-    }
-
-    // ---------- Життєвий цикл ----------
 
     /**
      * Колонка меню: заголовок і кнопка на кожну доріжку.
@@ -390,105 +447,50 @@ public final class PlayerScreen implements Screen {
         return column;
     }
 
-    @Override
-    public void onShown() {
-        try {
-            factory = new MediaPlayerFactory(VLC_OPTIONS);
-        } catch (RuntimeException | LinkageError e) {
-            // Найчастіша причина — не встановлено VLC або встановлено 32-бітну версію
-            notify.accept("Не знайдено VLC 3.x (64-bit). Встановіть його з videolan.org");
-            return;
+    /** Зрозуміла назва доріжки: VLC інколи віддає порожній опис. */
+    private static String trackName(TrackDescription track) {
+        if (track.id() < 0) {
+            return "Вимкнено";
         }
-        // 1. Спершу створюємо плеєр і підключаємо до нього ImageView та події
-        player = factory.mediaPlayers().newEmbeddedMediaPlayer();
-        player.videoSurface().set(new ImageViewVideoSurface(video));
-        player.events().addMediaPlayerEventListener(new PlayerEvents());
-
-        // 2. Потім вирішуємо, звідки почати
-        var saved = progressStore.position(progressKey);
-        if (saved.isPresent()) {
-            resumeAtMs = saved.getAsLong(); // перемотаємо в timeChanged, щойно файл стане seekable
-            notify.accept("Продовжуємо з " + format(resumeAtMs) + "     {S} — почати спочатку");        }
-
-        // 3. І лише тепер запускаємо відтворення — рівно один раз
-        player.media().play(source);
-        showOverlay();
+        String text = track.description();
+        return text == null || text.isBlank() ? "Доріжка " + track.id() : text;
     }
 
-    @Override
-    public void onHidden() {
+    // ---------- Наступна серія ----------
+
+    /** Серія закінчилась: показуємо картку і запускаємо відлік. */
+    private void showNextPanel() {
+        nextShown = true;
+        nextPanel.setVisible(true);
+        nextSecondsLeft = NEXT_COUNTDOWN_SECONDS;
+        nextCountdown.setText("через " + nextSecondsLeft + " с");
+        // Кадр щосекунди, рівно NEXT_COUNTDOWN_SECONDS разів
+        nextTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> {
+            nextSecondsLeft--;
+            if (nextSecondsLeft <= 0) {
+                playNext();
+            } else {
+                nextCountdown.setText("через " + nextSecondsLeft + " с");
+            }
+        }));
+        nextTimer.setCycleCount(NEXT_COUNTDOWN_SECONDS);
+        nextTimer.play();
+    }
+
+    private void hideNextPanel() {
+        nextShown = false;
+        nextPanel.setVisible(false);
         if (nextTimer != null) {
-            nextTimer.stop(); // плеєр закрили посеред відліку — наступна серія не повинна ввімкнутися сама
-        }
-        hideTimer.stop();
-        if (modeAnimation != null) {
-            modeAnimation.stop();
-        }
-        if (player != null) {
-            progressStore.save(progressKey, player.status().time(), player.status().length());
-            player.controls().stop();
-            player.release();
-            factory.release();
-            player = null;
+            nextTimer.stop();
         }
     }
 
-    // ---------- Керування ----------
-
-    @Override
-    public boolean handle(Command command) {
-        showOverlay();
-        if (player == null) {
-            return false; // VLC не запустився — дозволяємо лише вийти
-        }
-
-        if (nextShown) {
-            switch (command) {
-                case ACCEPT -> playNext();      // ✕ — дивитися зараз
-                case BACK -> hideNextPanel();   // ○ — скасувати; наступне ○ закриє плеєр
-                default -> { }                  // решту ігноруємо, поки йде відлік
-            }
-            return true;
-        }
-
-        if (tracksOpen) {
-            if (command == Command.BACK || command == Command.MENU) {
-                closeTracks();
-                return true;
-            }
-            // Стрілки й ✕ — навігація по меню доріжок, її робить ScreenManager
-            return false;
-        }
-        if (command == Command.MENU && !compact) {
-            openTracks();
-            return true;
-        }
-        if (command == Command.FULLSCREEN) {
-            setCompact(!compact);
-            return true;
-        }
-        if (compact) {
-            if (command == Command.BACK) {
-                setCompact(false); // ○ у компактному режимі — назад до відео, а не вихід
-                return true;
-            }
-            // Стрілки й ✕ віддаємо ScreenManager: він сам рухає фокус по кнопках панелі
-            return false;
-        }
-        switch (command) {
-            case ACCEPT -> player.controls().setPause(player.status().isPlaying());
-            case LEFT -> seek(-SHORT_SEEK_MS);
-            case RIGHT -> seek(SHORT_SEEK_MS);
-            case PAGE_LEFT -> seek(-LONG_SEEK_MS);
-            case PAGE_RIGHT -> seek(LONG_SEEK_MS);
-            case BACK -> {
-                return false; // ScreenManager закриє екран і викличе onHidden()
-            }
-            default -> {
-            } // UP, DOWN, MENU — просто показати панель
-        }
-        return true;
+    private void playNext() {
+        hideNextPanel();
+        next.play().run(); // застосунок закриє цей плеєр і відкриє наступну серію
     }
+
+    // ---------- Перемотка і панель керування ----------
 
     /**
      * Перемотка на {@code deltaMs} мілісекунд (від'ємне значення — назад).
@@ -501,15 +503,13 @@ public final class PlayerScreen implements Screen {
         updateTime(target, length);
     }
 
-    // ---------- Панель керування поверх відео ----------
-
     private void showOverlay() {
         fadeOverlay(true);
         hideTimer.playFromStart();
     }
 
     private void fadeOverlay(boolean visible) {
-        // Не ховаємо панель на паузі та в компактному режимі
+        // Не ховаємо панель на паузі, у компактному режимі і поки відкрите меню доріжок
         if (!visible && (compact || tracksOpen || (player != null && !player.status().isPlaying()))) {
             return;
         }
@@ -530,9 +530,7 @@ public final class PlayerScreen implements Screen {
         time.setText(format(timeMs) + " / " + format(lengthMs));
     }
 
-    /**
-     * Зберігаємо не на кожен кадр, а раз на 10 секунд перегляду — так диск не смикається постійно.
-     */
+    /** Зберігаємо не на кожен кадр, а раз на 10 секунд перегляду — так диск не смикається постійно. */
     private void autosave(long timeMs, long lengthMs) {
         if (Math.abs(timeMs - lastSavedMs) >= AUTOSAVE_INTERVAL_MS) {
             progressStore.save(progressKey, timeMs, lengthMs);
@@ -540,14 +538,8 @@ public final class PlayerScreen implements Screen {
         }
     }
 
-    @Override
-    public Parent view() {
-        return root;
-    }
-
-    @Override
-    public Node initialFocus() {
-        return root;
+    /** Що вмикати після цієї серії: підпис для картки і дія. */
+    public record Next(String label, Runnable play) {
     }
 
     /**
@@ -555,6 +547,7 @@ public final class PlayerScreen implements Screen {
      * можна лише з FX-потоку, тому все загортаємо в {@link Platform#runLater}.
      */
     private final class PlayerEvents extends MediaPlayerEventAdapter {
+
         @Override
         public void timeChanged(MediaPlayer mp, long newTime) {
             long target = resumeAtMs;
@@ -600,7 +593,8 @@ public final class PlayerScreen implements Screen {
 
         @Override
         public void error(MediaPlayer mp) {
-            Platform.runLater(() -> notify.accept("Не вдалося відтворити: " + source));
+            // Лише назва: адреса відео може містити API-ключ Jellyfin
+            Platform.runLater(() -> notify.accept("Не вдалося відтворити «" + title.name() + "»"));
         }
     }
 }

@@ -32,9 +32,7 @@ public final class PosterCard extends Button {
         FocusZoom.install(this, FOCUS_SCALE);
     }
 
-    /**
-     * Тонка смужка переглянутого внизу картки (для ряду «Продовжити перегляд»).
-     */
+    /** Тонка смужка переглянутого внизу картки (для ряду «Продовжити перегляд»). */
     public void showProgress(ObservableValue<ProgressStore.Progress> progress) {
         var bar = new ProgressBar();
         bar.getStyleClass().add("card-progress");

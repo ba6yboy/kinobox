@@ -1,30 +1,27 @@
 package ua.kinobox.data;
 
-import java.io.IOException;
-import java.io.Reader;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.StringJoiner;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Низькорівневий доступ до TMDB API v3: робить GET-запит і повертає JSON-текст.
- * Розбором JSON і перетворенням у Title займеться інший клас (крок 3b).
+ * Низькорівневий доступ до TMDB API v3: GET-запит і JSON-текст у відповідь.
+ * Розбір JSON і перетворення у {@link Title} — у {@link TmdbCatalogService}.
  */
 public final class TmdbClient {
 
     private static final URI BASE = URI.create("https://api.themoviedb.org/3/");
     private static final String LANGUAGE = "uk-UA";
+    /** Скільки символів тіла помилки показувати в лозі: повна сторінка помилки лише засмічує консоль. */
+    private static final int ERROR_BODY_LIMIT = 300;
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -36,32 +33,19 @@ public final class TmdbClient {
     }
 
     /**
-     * Читає токен з C:\Users\<ім'я>\.kinobox\tmdb.properties (рядок token=...).
-     * Порожньо — якщо файлу чи токена немає: тоді застосунок працюватиме на демо-даних.
+     * Токен з ~/.kinobox/tmdb.properties (рядок token=...).
+     * Порожньо, якщо файлу чи токена немає: тоді застосунок працює на демо-даних.
      */
     public static Optional<TmdbClient> fromUserHome() {
-        Path file = Path.of(System.getProperty("user.home"), ".kinobox", "tmdb.properties");
-        if (!Files.exists(file)) {
-            return Optional.empty();
-        }
-        var props = new Properties();
-        try (Reader in = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            props.load(in);
-        } catch (IOException e) {
-            System.err.println("Не вдалося прочитати " + file + ": " + e.getMessage());
-            return Optional.empty();
-        }
-        String token = props.getProperty("token", "").strip();
-        return token.isEmpty() ? Optional.empty() : Optional.of(new TmdbClient(token));
-    }
-
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        return UserFiles.readProperties(UserFiles.resolve("tmdb.properties"))
+                .map(props -> props.getProperty("token", "").strip())
+                .filter(token -> !token.isEmpty())
+                .map(TmdbClient::new);
     }
 
     /**
      * Асинхронний GET /3/{path}. Мова відповіді — українська.
-     * Приклад: get("trending/all/week", Map.of()) або get("search/multi", Map.of("query", "Дюна")).
+     * Приклад: {@code get("trending/all/week", Map.of())} або {@code get("search/multi", Map.of("query", "Дюна"))}.
      */
     public CompletableFuture<String> get(String path, Map<String, String> params) {
         var query = new StringJoiner("&");
@@ -79,9 +63,17 @@ public final class TmdbClient {
                 .thenApply(response -> {
                     if (response.statusCode() != 200) {
                         throw new IllegalStateException("TMDB: HTTP " + response.statusCode()
-                                + " для " + path + ": " + response.body());
+                                + " для " + path + ": " + abbreviate(response.body()));
                     }
                     return response.body();
                 });
+    }
+
+    private static String abbreviate(String text) {
+        return text.length() <= ERROR_BODY_LIMIT ? text : text.substring(0, ERROR_BODY_LIMIT) + "…";
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }

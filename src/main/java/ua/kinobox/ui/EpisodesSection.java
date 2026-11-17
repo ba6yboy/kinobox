@@ -14,12 +14,9 @@ import ua.kinobox.data.Season;
 import ua.kinobox.data.Title;
 
 import java.util.List;
-
 import java.util.function.BiConsumer;
 
-/**
- * Блок «Сезони та епізоди» на сторінці серіалу. Дані підвантажуються асинхронно.
- */
+/** Блок «Сезони та епізоди» на сторінці серіалу. Дані підвантажуються асинхронно. */
 final class EpisodesSection {
 
     private static final double STILL_WIDTH = 256;
@@ -27,6 +24,7 @@ final class EpisodesSection {
 
     private final Title series;
     private final CatalogService catalog;
+    private final BiConsumer<Title, Episode> onPlayEpisode;
 
     private final VBox root = new VBox(6);
     private final HBox seasonTabs = new HBox(10);
@@ -34,12 +32,8 @@ final class EpisodesSection {
     private final Label status = new Label("Завантаження сезонів…");
 
     private Button activeTab;
-    /**
-     * Сезон, який користувач вибрав останнім. Захищає від запізнілих відповідей.
-     */
+    /** Сезон, який користувач вибрав останнім. Захищає від запізнілих відповідей. */
     private int requestedSeason;
-
-    private final BiConsumer<Title, Episode> onPlayEpisode;
 
     EpisodesSection(Title series, CatalogService catalog, BiConsumer<Title, Episode> onPlayEpisode) {
         this.series = series;
@@ -49,12 +43,7 @@ final class EpisodesSection {
         seasonTabs.getStyleClass().add("season-tabs");
         cards.getStyleClass().add("row-cards");
 
-        var scroll = new ScrollPane(cards);
-        scroll.getStyleClass().setAll("row-scroll", "episodes-scroll");
-        scroll.setFitToHeight(true);
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setFocusTraversable(false);
+        var scroll = horizontalScroll(cards, "row-scroll", "episodes-scroll");
 
         // Напис статусу займає місце лише тоді, коли в ньому є текст
         status.getStyleClass().add("episode-meta");
@@ -63,12 +52,7 @@ final class EpisodesSection {
 
         // Вкладки сезонів — у власному прокрутному рядку, як і епізоди:
         // скільки б сезонів не було, сторінка не розширюється за межі екрана
-        var tabsScroll = new ScrollPane(seasonTabs);
-        tabsScroll.getStyleClass().setAll("row-scroll");
-        tabsScroll.setFitToHeight(true);
-        tabsScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        tabsScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        tabsScroll.setFocusTraversable(false);
+        var tabsScroll = horizontalScroll(seasonTabs, "row-scroll");
 
         root.getChildren().addAll(tabsScroll, status, scroll);
         catalog.seasons(series).whenComplete((seasons, error) ->
@@ -128,6 +112,17 @@ final class EpisodesSection {
         }));
     }
 
+    /** Горизонтальна прокрутка без смуг: її рухає ScrollUtil слідом за фокусом. */
+    private static ScrollPane horizontalScroll(Node content, String... styles) {
+        var scroll = new ScrollPane(content);
+        scroll.getStyleClass().setAll(styles);
+        scroll.setFitToHeight(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setFocusTraversable(false);
+        return scroll;
+    }
+
     private Button card(Episode episode) {
         var still = Artwork.still(episode.stillUrl(), series.accentHue(), STILL_WIDTH, STILL_HEIGHT);
 
@@ -143,4 +138,4 @@ final class EpisodesSection {
         button.setOnAction(e -> onPlayEpisode.accept(series, episode));
         return button;
     }
-}
+}

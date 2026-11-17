@@ -8,8 +8,19 @@ import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.*;
-import javafx.scene.paint.*;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
+import javafx.scene.layout.BackgroundImage;
+import javafx.scene.layout.BackgroundPosition;
+import javafx.scene.layout.BackgroundRepeat;
+import javafx.scene.layout.BackgroundSize;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.RadialGradient;
+import javafx.scene.paint.Stop;
 import javafx.scene.shape.Rectangle;
 import javafx.util.Duration;
 import ua.kinobox.data.Title;
@@ -20,18 +31,14 @@ import ua.kinobox.data.Title;
  */
 public final class Artwork {
 
-    /**
-     * Розмір, до якого декодуємо великі фони (банер, деталі).
-     */
+    /** Розмір, до якого декодуємо великі фони (банер, деталі). */
     public static final double BACKDROP_WIDTH = 1280;
     public static final double BACKDROP_HEIGHT = 720;
 
     private Artwork() {
     }
 
-    /**
-     * Горизонтальна (16:9) картка з назвою, як у TV-інтерфейсах.
-     */
+    /** Горизонтальна (16:9) картка з назвою, як у TV-інтерфейсах. */
     public static StackPane card(Title t, double w, double h) {
         var pane = new StackPane();
         pane.setMinSize(w, h);
@@ -70,9 +77,7 @@ public final class Artwork {
         return pane;
     }
 
-    /**
-     * Великий фон (сторінка деталей): одразу градієнт, а коли завантажиться — кадр з фільму.
-     */
+    /** Великий фон (сторінка деталей): одразу градієнт, а коли завантажиться — кадр з фільму. */
     public static Region backdrop(Title t) {
         var region = new Region();
         region.setBackground(backdropBackground(t.accentHue()));
@@ -86,9 +91,7 @@ public final class Artwork {
         return region;
     }
 
-    /**
-     * Кадр з епізоду: кольорова заглушка, поверх — зображення, заокруглені кути.
-     */
+    /** Кадр з епізоду: кольорова заглушка, поверх — зображення, заокруглені кути. */
     public static StackPane still(String url, double hue, double w, double h) {
         var pane = new StackPane(placeholder(hue, w, h));
         pane.setMinSize(w, h);
@@ -104,9 +107,7 @@ public final class Artwork {
         return pane;
     }
 
-    /**
-     * Кольоровий градієнт-заглушка.
-     */
+    /** Кольоровий градієнт-заглушка. */
     public static Background backdropBackground(double hue) {
         var base = new LinearGradient(0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.hsb(hue, 0.55, 0.42)),
@@ -118,9 +119,7 @@ public final class Artwork {
         return new Background(new BackgroundFill(base, null, null), new BackgroundFill(glow, null, null));
     }
 
-    /**
-     * Фірмовий фон KinoBox: темний, з червоним відсвітом. Для банерів без конкретного тайтлу.
-     */
+    /** Фірмовий фон KinoBox: темний, з червоним відсвітом. Для банерів без конкретного тайтлу. */
     public static Background brandBackground() {
         var base = new LinearGradient(0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
                 new Stop(0, Color.web("#2a0f12")),
@@ -132,9 +131,7 @@ public final class Artwork {
         return new Background(new BackgroundFill(base, null, null), new BackgroundFill(glow, null, null));
     }
 
-    /**
-     * Фон із зображенням у режимі «cover»: заповнює весь простір, зайве обрізається, як у CSS.
-     */
+    /** Фон із зображенням у режимі «cover»: заповнює весь простір, зайве обрізається, як у CSS. */
     public static Background imageBackground(Image img) {
         var cover = new BackgroundSize(100, 100, true, true, false, true);
         return new Background(new BackgroundImage(img, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,

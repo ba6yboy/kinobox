@@ -4,11 +4,13 @@ import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ObservableValue;
 import ua.kinobox.data.ArchiveClient;
+import ua.kinobox.data.CatalogService;
 import ua.kinobox.data.EpisodeRef;
 import ua.kinobox.data.Title;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -61,6 +63,42 @@ public final class ArchiveSource implements VideoSource {
         return CompletableFuture.completedFuture(Optional.empty());
     }
 
+    /**
+     * Ряд «Класика»: найпопулярніші фільми колекції, зіставлені з каталогом (назва + рік ±1).
+     * Знайдені пари одразу кладемо в кеш — на сторінці фільму пошук в Archive вже не потрібен.
+     */
+    public CompletableFuture<List<Title>> classics(CatalogService catalog, int limit) {
+        return client.popularFeatureFilms(limit * 2) // з запасом: частину не вдасться зіставити
+                .thenCompose(films -> {
+                    List<CompletableFuture<Optional<Title>>> lookups = films.stream()
+                            .filter(film -> film.year() > 0)  // без року легко помилитися з фільмом
+                            .map(film -> findInCatalog(catalog, film))
+                            .toList();
+                    return CompletableFuture.allOf(lookups.toArray(CompletableFuture[]::new))
+                            .thenApply(done -> lookups.stream()
+                                    .map(CompletableFuture::join)
+                                    .flatMap(Optional::stream)
+                                    .distinct()
+                                    .limit(limit)
+                                    .toList());
+                });
+    }
+
+    private CompletableFuture<Optional<Title>> findInCatalog(CatalogService catalog, ArchiveClient.Film film) {
+        // «Nosferatu (1922)» → «Nosferatu»: дужки в назвах Archive лише заважають пошуку
+        String name = film.title().replaceAll("\\(.*?\\)", "").strip();
+        return catalog.search(name)
+                .thenApply(results -> results.stream()
+                        .filter(t -> t.kind() == Title.Kind.MOVIE && Math.abs(t.year() - film.year()) <= 1)
+                        .findFirst())
+                .thenApply(found -> {
+                    found.ifPresent(title -> matches.put(title.id(),
+                            CompletableFuture.completedFuture(Optional.of(film.identifier()))));
+                    return found;
+                })
+                .exceptionally(error -> Optional.empty());
+    }
+
     /** Пошук один раз на тайтл; помилку мережі вважаємо «не знайдено», щоб не ламати сторінку. */
     private CompletableFuture<Optional<String>> match(Title title) {
         return matches.computeIfAbsent(title.id(), id -> {
@@ -90,4 +128,4 @@ public final class ArchiveSource implements VideoSource {
         names.add(original.split(":|,| - ")[0].strip());
         return names;
     }
-}
+}

@@ -11,9 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class SpatialNavigatorTest {
 
-    /**
-     * Дві «полиці» по 4 картки, другу зсунуто на пів картки вправо.
-     */
+    /** Дві «полиці» по 4 картки, другу зсунуто на пів картки вправо. */
     private final List<Bounds> grid = List.of(
             box(0, 0), box(110, 0), box(220, 0), box(330, 0),         // 0..3
             box(55, 100), box(165, 100), box(275, 100), box(385, 100)  // 4..7

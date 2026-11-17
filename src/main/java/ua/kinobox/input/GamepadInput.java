@@ -22,8 +22,9 @@ import java.util.logging.Logger;
  *   ✕ (a)               → ACCEPT
  *   ○ (b)               → BACK
  *   □ (x)               → FULLSCREEN
+ *   △ (y)               → SECONDARY
  *   Options (start)     → MENU
- *   L1 / R1             → PAGE_LEFT / PAGE_RIGHT
+ *   L1, L2 / R1, R2     → PAGE_LEFT / PAGE_RIGHT (з автоповтором)
  * </pre>
  */
 public final class GamepadInput {
@@ -31,9 +32,7 @@ public final class GamepadInput {
     private static final Logger LOG = Logger.getLogger(GamepadInput.class.getName());
 
     private static final float STICK_DEADZONE = 0.55f;
-    /**
-     * Тригери L2/R2 аналогові (0..1): вважаємо натиснутим понад половину ходу.
-     */
+    /** Тригери L2/R2 аналогові (0..1): вважаємо натиснутим понад половину ходу. */
     private static final float TRIGGER_THRESHOLD = 0.5f;
     private static final long REPEAT_DELAY_NS = 380_000_000L;
     private static final long REPEAT_INTERVAL_NS = 95_000_000L;
@@ -85,9 +84,7 @@ public final class GamepadInput {
         }
     }
 
-    /**
-     * Коротка вібрація — тактильний відгук на дію. Тихо ігнорується, якщо не підтримується.
-     */
+    /** Коротка вібрація — тактильний відгук на дію. Тихо ігнорується, якщо не підтримується. */
     public void pulse(float strength, int millis) {
         if (manager != null && connected) {
             try {

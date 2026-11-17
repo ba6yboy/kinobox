@@ -4,10 +4,9 @@ import javafx.beans.value.ObservableValue;
 import ua.kinobox.data.EpisodeRef;
 import ua.kinobox.data.Title;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-
-import java.util.List;
 
 /**
  * Звідки береться відео для плеєра. Каталог (назви, описи) — окремо, у CatalogService.
@@ -26,7 +25,10 @@ public interface VideoSource {
     /** Чи можна дивитися тайтл. Може змінитися, коли джерело довантажиться. */
     ObservableValue<Boolean> availability(Title title);
 
-    /** Посилання на фільм для VLC; порожньо — фільму в цьому джерелі немає. */
+    /**
+     * Посилання на фільм для VLC; порожньо — фільму в цьому джерелі немає.
+     * Посилання може містити секрет (API-ключ), тому його не показують користувачу і не пишуть у лог.
+     */
     CompletableFuture<Optional<String>> movieUrl(Title movie);
 
     /** Посилання на серію для VLC; порожньо — серії в цьому джерелі немає. */
@@ -44,4 +46,4 @@ public interface VideoSource {
     default CompletableFuture<Optional<EpisodeRef>> nextEpisode(Title series, EpisodeRef current) {
         return CompletableFuture.completedFuture(Optional.of(current.next()));
     }
-}
+}

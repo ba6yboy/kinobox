@@ -5,9 +5,7 @@ import javafx.application.Platform;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-/**
- * Єдина точка, куди всі пристрої надсилають команди. Доставка завжди в FX-потоці.
- */
+/** Єдина точка, куди всі пристрої надсилають команди. Доставка завжди в FX-потоці. */
 public final class InputRouter {
 
     private Consumer<Command> handler = cmd -> {

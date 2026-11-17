@@ -9,9 +9,7 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
 
-/**
- * Коротке повідомлення внизу екрана.
- */
+/** Коротке повідомлення внизу екрана. */
 public final class Toast {
 
     private final Label label = new Label();

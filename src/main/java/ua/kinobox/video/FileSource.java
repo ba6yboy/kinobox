@@ -8,7 +8,7 @@ import ua.kinobox.data.Title;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
-/** Один файл чи посилання для всіх тайтлів: тестове відео або аргумент --video під час розробки. */
+/** Один файл чи посилання для всіх тайтлів — аргумент --video=... під час розробки. */
 public final class FileSource implements VideoSource {
 
     private final String video;
@@ -36,4 +36,4 @@ public final class FileSource implements VideoSource {
     public CompletableFuture<Optional<String>> episodeUrl(Title series, EpisodeRef episode) {
         return movieUrl(series);
     }
-}
+}

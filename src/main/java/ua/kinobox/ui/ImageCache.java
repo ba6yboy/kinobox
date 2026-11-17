@@ -1,6 +1,7 @@
 package ua.kinobox.ui;
 
 import javafx.scene.image.Image;
+import ua.kinobox.data.UserFiles;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -22,7 +23,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 import java.util.stream.Stream;
 
 /**
@@ -31,11 +31,10 @@ import java.util.stream.Stream;
  */
 public final class ImageCache {
 
-    private static final Path DIR = Path.of(System.getProperty("user.home"), ".kinobox", "cache", "images");
-    /**
-     * Скільки зображень завантажуємо одночасно. Решта чекає в черзі.
-     */
+    private static final Path DIR = UserFiles.resolve("cache", "images");
+    /** Скільки зображень завантажуємо одночасно. Решта чекає в черзі. */
     private static final int PARALLEL_DOWNLOADS = 6;
+    /** Скільки разів пробуємо, якщо сервер не відповів вчасно. */
     private static final int ATTEMPTS = 2;
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
@@ -44,19 +43,15 @@ public final class ImageCache {
             .build();
 
     /**
-     * 6 потоків = 6 завантажень одночасно: кожен потік качає одну картинку за раз.
+     * {@link #PARALLEL_DOWNLOADS} потоків — стільки ж завантажень одночасно: кожен потік качає одну картинку за раз.
      * daemon — щоб ці потоки не заважали програмі завершитися.
      */
     private static final ExecutorService DOWNLOADS = Executors.newFixedThreadPool(PARALLEL_DOWNLOADS,
             Thread.ofPlatform().daemon().name("image-download-", 1).factory());
 
-    /**
-     * URL → файл на диску. Один файл завантажується лише раз, навіть якщо його просять одночасно.
-     */
+    /** URL → файл на диску. Один файл завантажується лише раз, навіть якщо його просять одночасно. */
     private static final Map<String, CompletableFuture<Path>> FILES = new ConcurrentHashMap<>();
-    /**
-     * URL + розмір → готове зображення в пам'яті.
-     */
+    /** URL + розмір → готове зображення в пам'яті. */
     private static final Map<String, CompletableFuture<Image>> IMAGES = new ConcurrentHashMap<>();
 
     private ImageCache() {
@@ -67,6 +62,11 @@ public final class ImageCache {
      * Ніколи не завершується помилкою: якщо щось пішло не так, результат — null.
      */
     public static CompletableFuture<Image> get(String url, double width, double height) {
+        if (!isHttps(url)) {
+            // Адреси приходять і з JSON-файлів користувача: локальні файли й незашифровані адреси не відкриваємо
+            System.err.println("Зображення пропущено: дозволені лише https-адреси");
+            return CompletableFuture.completedFuture(null);
+        }
         String key = url + "@" + (int) width + "x" + (int) height;
         CompletableFuture<Image> future = IMAGES.computeIfAbsent(key, k -> file(url)
                 // Async: навіть якщо файл уже на диску, декодуємо НЕ в потоці, що викликав get()
@@ -84,82 +84,7 @@ public final class ImageCache {
         return future;
     }
 
-    private static CompletableFuture<Path> file(String url) {
-        CompletableFuture<Path> future = FILES.computeIfAbsent(url, u -> {
-            Path target = DIR.resolve(fileName(u));
-            if (Files.exists(target)) {
-                return CompletableFuture.completedFuture(target);   // з диска — без черги
-            }
-            return CompletableFuture.supplyAsync(() -> download(u, target), DOWNLOADS);
-        });
-        future.whenComplete((path, error) -> {
-            if (error != null) {
-                FILES.remove(url, future);
-            }
-        });
-        return future;
-    }
-
-    /**
-     * Виконується в одному з потоків DOWNLOADS, тому тут можна чекати синхронно.
-     */
-    private static Path download(String url, Path target) {
-        // Пишемо в тимчасовий .part і лише потім перейменовуємо:
-        // якщо програму закриють посеред завантаження, у кеші не лишиться обрізаного файлу
-        Path part = DIR.resolve(target.getFileName() + ".part");
-        var request = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(20))
-                .GET()
-                .build();
-        try {
-            Files.createDirectories(DIR);
-            for (int attempt = 1; ; attempt++) {
-                try {
-                    var response = HTTP.send(request, HttpResponse.BodyHandlers.ofFile(part));
-                    if (response.statusCode() != 200) {
-                        Files.deleteIfExists(part);
-                        throw new IOException("HTTP " + response.statusCode());
-                    }
-                    return Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
-                } catch (HttpTimeoutException e) {
-                    if (attempt >= ATTEMPTS) {
-                        throw e;
-                    }
-                    // інакше — ще одна спроба
-                }
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Завантаження перервано", e);
-        }
-    }
-
-    private static Image decode(Path path, double width, double height) {
-        // backgroundLoading = false: ми вже у фоновому потоці, тож читаємо синхронно
-        var image = new Image(path.toUri().toString(), width, height, true, true, false);
-        if (image.isError()) {
-            throw new IllegalStateException("не вдалося прочитати " + path, image.getException());
-        }
-        return image;
-    }
-
-    /**
-     * Ім'я файлу в кеші — SHA-256 від URL: коротке, унікальне, без заборонених у Windows символів.
-     */
-    private static String fileName(String url) {
-        try {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(url.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash) + ".jpg";
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e); // SHA-256 є в кожній Java, сюди не потрапимо
-        }
-    }
-
-    /**
-     * Розмір кешу на диску в байтах. Рахується у фоні — тек може бути сотні файлів.
-     */
+    /** Розмір кешу на диску в байтах. Рахується у фоні — файлів можуть бути сотні. */
     public static CompletableFuture<Long> diskSize() {
         return CompletableFuture.supplyAsync(() -> {
             if (!Files.isDirectory(DIR)) {
@@ -203,5 +128,83 @@ public final class ImageCache {
                 throw new UncheckedIOException(e);
             }
         });
+    }
+
+    private static CompletableFuture<Path> file(String url) {
+        CompletableFuture<Path> future = FILES.computeIfAbsent(url, u -> {
+            Path target = DIR.resolve(fileName(u));
+            if (Files.exists(target)) {
+                return CompletableFuture.completedFuture(target);   // з диска — без черги
+            }
+            return CompletableFuture.supplyAsync(() -> download(u, target), DOWNLOADS);
+        });
+        future.whenComplete((path, error) -> {
+            if (error != null) {
+                FILES.remove(url, future);
+            }
+        });
+        return future;
+    }
+
+    /** Виконується в одному з потоків DOWNLOADS, тому тут можна чекати синхронно. */
+    private static Path download(String url, Path target) {
+        // Пишемо в тимчасовий .part і лише потім перейменовуємо:
+        // якщо програму закриють посеред завантаження, у кеші не лишиться обрізаного файлу
+        Path part = DIR.resolve(target.getFileName() + ".part");
+        var request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(20))
+                .GET()
+                .build();
+        try {
+            Files.createDirectories(DIR);
+            for (int attempt = 1; ; attempt++) {
+                try {
+                    var response = HTTP.send(request, HttpResponse.BodyHandlers.ofFile(part));
+                    if (response.statusCode() != 200) {
+                        Files.deleteIfExists(part);
+                        throw new IOException("HTTP " + response.statusCode());
+                    }
+                    return Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
+                } catch (HttpTimeoutException e) {
+                    if (attempt >= ATTEMPTS) {
+                        throw e;
+                    }
+                    // інакше — ще одна спроба
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Завантаження перервано", e);
+        }
+    }
+
+    private static Image decode(Path path, double width, double height) {
+        // backgroundLoading = false: ми вже у фоновому потоці, тож читаємо синхронно
+        var image = new Image(path.toUri().toString(), width, height, true, true, false);
+        if (image.isError()) {
+            throw new IllegalStateException("не вдалося прочитати " + path, image.getException());
+        }
+        return image;
+    }
+
+    /** Ім'я файлу в кеші — SHA-256 від URL: коротке, унікальне, без заборонених у Windows символів. */
+    private static String fileName(String url) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(url.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash) + ".jpg";
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e); // SHA-256 є в кожній Java, сюди не потрапимо
+        }
+    }
+
+    private static boolean isHttps(String url) {
+        try {
+            URI uri = URI.create(url);
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

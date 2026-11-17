@@ -5,34 +5,28 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Джерело каталогу. Зараз є {@link MockCatalogService};
- * на кроці 3 з'явиться реалізація для TMDB, на кроці 5 — для Jellyfin.
+ * Джерело каталогу: назви, описи, зображення, сезони.
+ * Реалізації — {@link TmdbCatalogService} і {@link MockCatalogService} (демо-дані без мережі).
  * Методи асинхронні, щоб UI-потік ніколи не чекав на мережу.
  */
 public interface CatalogService {
 
+    /** Тайтл для банера головного екрана. */
     CompletableFuture<Title> featured();
 
+    /** Ряди головного екрана. */
     CompletableFuture<List<CatalogRow>> homeRows();
 
-    /**
-     * Ряди для розділу «Фільми» або «Серіали».
-     */
+    /** Ряди для розділу «Фільми» або «Серіали». */
     CompletableFuture<List<CatalogRow>> rows(Title.Kind kind);
 
-    /**
-     * Пошук фільмів і серіалів за назвою.
-     */
+    /** Пошук фільмів і серіалів за назвою. */
     CompletableFuture<List<Title>> search(String query);
 
-    /**
-     * Сезони серіалу (без «Спецвипусків»). Для фільму — порожній список.
-     */
+    /** Сезони серіалу (без «Спецвипусків»). Для фільму — порожній список. */
     CompletableFuture<List<Season>> seasons(Title series);
 
-    /**
-     * Епізоди одного сезону.
-     */
+    /** Епізоди одного сезону. */
     CompletableFuture<List<Episode>> episodes(Title series, int season);
 
     /** Один тайтл за id ("movie:603", "tv:1399"). Порожньо, якщо не знайдено. Не завершується помилкою. */

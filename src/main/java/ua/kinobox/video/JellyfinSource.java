@@ -9,8 +9,12 @@ import ua.kinobox.data.EpisodeRef;
 import ua.kinobox.data.JellyfinLibrary;
 import ua.kinobox.data.Title;
 
-import java.util.*;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Відео з вашого сервера Jellyfin. Фільми й серіали зіставляються з каталогом за TMDB-номером. */
 public final class JellyfinSource implements VideoSource {
@@ -19,7 +23,7 @@ public final class JellyfinSource implements VideoSource {
     /** Що є в медіатеці: id тайтлу → id елемента в Jellyfin. Змінюється лише у FX-потоці. */
     private final ObservableMap<String, String> items = FXCollections.observableHashMap();
     /** Епізоди серіалів: id тайтлу → ("s1e2" → id елемента). Запитуємо раз на серіал. */
-    private final Map<String, CompletableFuture<Map<String, String>>> episodes = new HashMap<>();
+    private final Map<String, CompletableFuture<Map<String, String>>> episodes = new ConcurrentHashMap<>();
 
     public JellyfinSource(JellyfinLibrary library) {
         this.library = library;
@@ -47,26 +51,14 @@ public final class JellyfinSource implements VideoSource {
 
     @Override
     public CompletableFuture<Optional<String>> movieUrl(Title movie) {
-        return CompletableFuture.completedFuture(Optional.ofNullable(items.get(movie.id())).map(this::stream));
+        // thenApply, а не map одразу: якщо streamUrl відкине id, отримаємо невдалий future, а не виняток тут
+        return CompletableFuture.completedFuture(Optional.ofNullable(items.get(movie.id())))
+                .thenApply(itemId -> itemId.map(this::stream));
     }
 
     @Override
     public CompletableFuture<Optional<String>> episodeUrl(Title series, EpisodeRef episode) {
         return episodesOf(series).thenApply(index -> Optional.ofNullable(index.get(episode.code())).map(this::stream));
-    }
-
-    /** Епізоди серіалу; невдалі запити не кешуємо, щоб наступного разу спробувати знову. */
-    private CompletableFuture<Map<String, String>> episodesOf(Title series) {
-        String seriesItemId = items.get(series.id());
-        if (seriesItemId == null) {
-            return CompletableFuture.completedFuture(Map.of()); // серіалу немає в медіатеці
-        }
-        var cached = episodes.get(series.id());
-        if (cached == null || cached.isCompletedExceptionally()) {
-            cached = library.episodes(seriesItemId);
-            episodes.put(series.id(), cached);
-        }
-        return cached;
     }
 
     @Override
@@ -83,7 +75,17 @@ public final class JellyfinSource implements VideoSource {
         return library.recentlyAdded(limit);
     }
 
+    /** Епізоди серіалу; невдалі запити не кешуємо, щоб наступного разу спробувати знову. */
+    private CompletableFuture<Map<String, String>> episodesOf(Title series) {
+        String seriesItemId = items.get(series.id());
+        if (seriesItemId == null) {
+            return CompletableFuture.completedFuture(Map.of()); // серіалу немає в медіатеці
+        }
+        return episodes.compute(series.id(), (id, cached) ->
+                cached == null || cached.isCompletedExceptionally() ? library.episodes(seriesItemId) : cached);
+    }
+
     private String stream(String itemId) {
         return library.client().streamUrl(itemId);
     }
-}
+}

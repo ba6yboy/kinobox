@@ -9,7 +9,14 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.*;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.RowConstraints;
+import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import ua.kinobox.data.CatalogService;
 import ua.kinobox.data.Title;
@@ -35,15 +42,11 @@ import java.util.function.Consumer;
  */
 public final class SearchScreen implements Screen {
 
-    /**
-     * Цифри й символи, що трапляються в назвах. Однакові для обох мов.
-     */
+    /** Цифри й символи, що трапляються в назвах. Однакові для обох мов. */
     private static final List<String> DIGIT_ROW = List.of(
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", ":");
 
-    /**
-     * Стандартна українська розкладка ЙЦУКЕН; Ґ і апостроф — як на розширеній розкладці Windows.
-     */
+    /** Стандартна українська розкладка ЙЦУКЕН; Ґ і апостроф — як на розширеній розкладці Windows. */
     private static final List<List<String>> UKRAINIAN = List.of(
             List.of("Й", "Ц", "У", "К", "Е", "Н", "Г", "Ш", "Щ", "З", "Х", "Ї"),
             List.of("Ф", "І", "В", "А", "П", "Р", "О", "Л", "Д", "Ж", "Є"),
@@ -54,19 +57,13 @@ public final class SearchScreen implements Screen {
             List.of("A", "S", "D", "F", "G", "H", "J", "K", "L"),
             List.of("Z", "X", "C", "V", "B", "N", "M", "'", "."));
 
-    /**
-     * Найдовший ряд — 12 клавіш. Сітка має вдвічі більше вузьких стовпців: клавіша займає два.
-     */
+    /** Найдовший ряд — 12 клавіш. Сітка має вдвічі більше вузьких стовпців: клавіша займає два. */
     private static final int KEY_COLUMNS = 12;
 
-    /**
-     * Рядків завжди 4, щоб клавіатура не змінювала висоту при перемиканні мови.
-     */
+    /** Рядків завжди 4, щоб клавіатура не змінювала висоту при перемиканні мови. */
     private static final int KEY_ROWS = 4;
     private static final double KEY_HEIGHT = 52;
-    /**
-     * Шукаємо, коли користувач перестав набирати на стільки мілісекунд.
-     */
+    /** Шукаємо, коли користувач перестав набирати на стільки мілісекунд. */
     private static final Duration SEARCH_DELAY = Duration.millis(450);
     private static final int MIN_QUERY_LENGTH = 2;
 
@@ -82,18 +79,12 @@ public final class SearchScreen implements Screen {
     private final PauseTransition debounce = new PauseTransition(SEARCH_DELAY);
 
     private boolean ukrainian = true;
-    /**
-     * Після «Знайти» перенести фокус на перший результат, щойно він з'явиться.
-     */
+    /** Після «Знайти» перенести фокус на перший результат, щойно він з'явиться. */
     private boolean focusResultsWhenReady;
-    /**
-     * Запит, результати якого зараз на екрані.
-     */
+    /** Запит, результати якого зараз на екрані. */
     private String shownQuery = "";
     private Button firstKey;
-    /**
-     * Остання клавіша у фокусі — туди повертаємось кнопкою ○ з результатів.
-     */
+    /** Остання клавіша у фокусі — туди повертаємось кнопкою ○ з результатів. */
     private Button lastKey;
 
     public SearchScreen(CatalogService catalog, Consumer<Title> openDetails) {
@@ -148,8 +139,7 @@ public final class SearchScreen implements Screen {
                     new ColumnConstraints(20, 20, Double.MAX_VALUE, Priority.ALWAYS, HPos.CENTER, true));
         }
         for (int r = 0; r < KEY_ROWS; r++) {
-            var row = new RowConstraints(KEY_HEIGHT);
-            keys.getRowConstraints().add(row);
+            keys.getRowConstraints().add(new RowConstraints(KEY_HEIGHT));
         }
 
         setupKey(languageToggle, () -> {
@@ -174,6 +164,50 @@ public final class SearchScreen implements Screen {
         // Кожна зміна тексту перезапускає таймер; пошук — лише коли набір зупинився
         query.textProperty().addListener((obs, old, text) -> debounce.playFromStart());
         debounce.setOnFinished(e -> runSearch());
+    }
+
+    // ---------- Screen ----------
+
+    @Override
+    public boolean handle(Command command) {
+        Node focused = root.getScene() == null ? null : root.getScene().getFocusOwner();
+        switch (command) {
+            case FULLSCREEN -> editFromAnywhere(focused, this::backspace);      // □
+            case SECONDARY -> editFromAnywhere(focused, () -> type(" "));       // △
+            case PAGE_LEFT -> editFromAnywhere(focused, query::clear);          // L1 / L2
+            case PAGE_RIGHT, MENU -> submit();         // R1 / R2 / Options
+            case ACCEPT -> {
+                if (focused != query) {
+                    return false;                      // ✕ на клавіші — звичайне натискання кнопки
+                }
+                submit();                              // Enter на фізичній клавіатурі в полі
+            }
+            case BACK -> {
+                if (!isInResults(focused)) {
+                    return false;                      // з клавіатури — ScreenManager закриє пошук
+                }
+                focusKeyboard();                       // з результатів — назад на клавіатуру
+            }
+            default -> {
+                return false;                          // стрілки — звичайна навігація
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public void onHidden() {
+        debounce.stop();
+    }
+
+    @Override
+    public Parent view() {
+        return root;
+    }
+
+    @Override
+    public Node initialFocus() {
+        return firstKey;
     }
 
     // ---------- Клавіатура ----------
@@ -209,9 +243,7 @@ public final class SearchScreen implements Screen {
         return button;
     }
 
-    /**
-     * Спільні налаштування для всіх клавіш: стиль, розтягування, запам'ятовування фокуса.
-     */
+    /** Спільні налаштування для всіх клавіш: стиль, розтягування, запам'ятовування фокуса. */
     private void setupKey(Button button, Runnable onPress) {
         button.getStyleClass().setAll("osk-key");
         button.setPrefWidth(40);                      // однакова «база» → однакова ширина після розтягування
@@ -242,9 +274,7 @@ public final class SearchScreen implements Screen {
         SpatialNavigator.focus(target);
     }
 
-    /**
-     * Редагування запиту з будь-якого місця: якщо фокус у результатах — спершу повертаємося на клавіатуру.
-     */
+    /** Редагування запиту з будь-якого місця: якщо фокус у результатах — спершу повертаємося на клавіатуру. */
     private void editFromAnywhere(Node focused, Runnable edit) {
         if (isInResults(focused)) {
             focusKeyboard();
@@ -254,9 +284,7 @@ public final class SearchScreen implements Screen {
 
     // ---------- Пошук ----------
 
-    /**
-     * «Enter»: шукати одразу, без очікування, і перейти до результатів.
-     */
+    /** «Enter»: шукати одразу, без очікування, і перейти до результатів. */
     private void submit() {
         debounce.stop();
         String text = query.getText().strip();
@@ -311,49 +339,5 @@ public final class SearchScreen implements Screen {
             }
         }
         return false;
-    }
-
-    // ---------- Screen ----------
-
-    @Override
-    public boolean handle(Command command) {
-        Node focused = root.getScene() == null ? null : root.getScene().getFocusOwner();
-        switch (command) {
-            case FULLSCREEN -> editFromAnywhere(focused, this::backspace);      // □
-            case SECONDARY -> editFromAnywhere(focused, () -> type(" "));       // △
-            case PAGE_LEFT -> editFromAnywhere(focused, query::clear);          // L1 / L2
-            case PAGE_RIGHT, MENU -> submit();         // R1 / R2 / Options
-            case ACCEPT -> {
-                if (focused != query) {
-                    return false;                      // ✕ на клавіші — звичайне натискання кнопки
-                }
-                submit();                              // Enter на фізичній клавіатурі в полі
-            }
-            case BACK -> {
-                if (!isInResults(focused)) {
-                    return false;                      // з клавіатури — ScreenManager закриє пошук
-                }
-                focusKeyboard();                       // з результатів — назад на клавіатуру
-            }
-            default -> {
-                return false;                          // стрілки — звичайна навігація
-            }
-        }
-        return true;
-    }
-
-    @Override
-    public void onHidden() {
-        debounce.stop();
-    }
-
-    @Override
-    public Parent view() {
-        return root;
-    }
-
-    @Override
-    public Node initialFocus() {
-        return firstKey;
     }
 }

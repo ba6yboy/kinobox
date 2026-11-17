@@ -1,6 +1,7 @@
 package ua.kinobox.ui;
 
 import javafx.animation.FadeTransition;
+import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.scene.Node;
@@ -20,37 +21,16 @@ import java.util.Deque;
  */
 public final class ScreenManager {
 
+    /** На скільки карток стрибають L1/R1. */
     private static final int PAGE_STEP = 5;
+
     private final StackPane layer = new StackPane();
     private final Deque<Entry> stack = new ArrayDeque<>();
     private final ReadOnlyObjectWrapper<Screen> current = new ReadOnlyObjectWrapper<>();
     private Runnable onEdge = () -> {
     };
 
-    private static void focusInitial(Screen screen) {
-        Node target = screen.initialFocus();
-        if (target == null) {
-            target = SpatialNavigator.first(screen.view());
-        }
-        if (target != null) {
-            Node t = target;
-            // після layout-проходу, щоб координати для прокрутки вже були пораховані
-            javafx.application.Platform.runLater(() -> SpatialNavigator.focus(t));
-        }
-    }
-
-    private static boolean isInside(Node node, Parent root) {
-        for (Node n = node; n != null; n = n.getParent()) {
-            if (n == root) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Екран, що зараз зверху стеку. На нього можна підписатися (наприклад, щоб сховати підказки).
-     */
+    /** Екран, що зараз зверху стеку. На нього можна підписатися (наприклад, щоб сховати підказки). */
     public ReadOnlyObjectProperty<Screen> currentProperty() {
         return current.getReadOnlyProperty();
     }
@@ -59,9 +39,7 @@ public final class ScreenManager {
         return layer;
     }
 
-    /**
-     * Викликається, коли далі рухатися нікуди (наприклад, для вібрації DualSense).
-     */
+    /** Викликається, коли далі рухатися нікуди (наприклад, для вібрації DualSense). */
     public void setOnEdge(Runnable onEdge) {
         this.onEdge = onEdge;
     }
@@ -150,10 +128,33 @@ public final class ScreenManager {
             }
             case BACK -> pop();
             case MENU, FULLSCREEN, SECONDARY -> {
+                // за замовчуванням нічого: ці кнопки обробляють самі екрани
             }
         }
     }
 
+    private static void focusInitial(Screen screen) {
+        Node target = screen.initialFocus();
+        if (target == null) {
+            target = SpatialNavigator.first(screen.view());
+        }
+        if (target != null) {
+            Node t = target;
+            // після layout-проходу, щоб координати для прокрутки вже були пораховані
+            Platform.runLater(() -> SpatialNavigator.focus(t));
+        }
+    }
+
+    private static boolean isInside(Node node, Parent root) {
+        for (Node n = node; n != null; n = n.getParent()) {
+            if (n == root) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Екран у стеку і вузол, що мав фокус, коли поверх відкрили інший екран (масив — щоб змінювати в record). */
     private record Entry(Screen screen, Node[] lastFocus) {
     }
 }
