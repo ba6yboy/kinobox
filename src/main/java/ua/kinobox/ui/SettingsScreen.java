@@ -163,6 +163,11 @@ public final class SettingsScreen implements Screen {
         var box = section("Про програму", name, source);
         tmdbLogo().ifPresent(box.getChildren()::add);
         box.getChildren().add(notice);
+
+        var justWatch = new Label("Дані «Де подивитися» надає JustWatch.");
+        justWatch.getStyleClass().add("settings-text");
+        box.getChildren().add(justWatch);
+
         return box;
     }
 

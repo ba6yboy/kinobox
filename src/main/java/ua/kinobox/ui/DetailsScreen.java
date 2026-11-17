@@ -25,6 +25,10 @@ import ua.kinobox.data.Episode;
 
 import java.util.function.BiConsumer;
 
+import javafx.application.Platform;
+import javafx.beans.property.SimpleObjectProperty;
+import ua.kinobox.data.WatchOptions;
+
 /**
  * Сторінка фільму або серіалу: опис, кнопки дій, для серіалів — епізоди.
  */
@@ -68,15 +72,36 @@ public final class DetailsScreen implements Screen {
         play.setOnAction(e -> onPlay.accept(t));
 
         String startText = "Дивитися";
+        // Де подивитися онлайн — вантажиться у фоні; null, поки не прийшло або даних немає
+        var where = new SimpleObjectProperty<WatchOptions>();
+        catalog.watchOptions(t).thenAccept(options ->
+                options.ifPresent(o -> Platform.runLater(() -> where.set(o))));
         // Текст кнопки і смужка самі оновлюються, коли плеєр зберігає позицію
         ObservableValue<String> watchText = progress
                 .map(p -> "Продовжити з " + PlayerScreen.format(p.positionMs()))
                 .orElse(startText);
         // Текст залежить одразу від двох значень: чи є файл у медіатеці і чи почали дивитися
-        play.textProperty().bind(Bindings.createStringBinding(
-                () -> Boolean.TRUE.equals(available.getValue()) ? watchText.getValue() : "Немає у медіатеці",
-                available, watchText));
-        play.opacityProperty().bind(available.map(yes -> yes ? 1.0 : 0.55));
+        play.textProperty().bind(Bindings.createStringBinding(() -> {
+            if (Boolean.TRUE.equals(available.getValue())) {
+                return watchText.getValue();
+            }
+            return where.get() != null ? "Де подивитися" : "Немає у медіатеці";
+        }, available, watchText, where));
+        // Приглушуємо, лише коли дивитися ніде: ні в медіатеці, ні онлайн
+        play.opacityProperty().bind(Bindings.createDoubleBinding(
+                () -> Boolean.TRUE.equals(available.getValue()) || where.get() != null ? 1.0 : 0.55,
+                available, where));
+
+        var whereLabel = new Label();
+        whereLabel.getStyleClass().add("details-where");
+        whereLabel.setWrapText(true);
+        whereLabel.setMaxWidth(900);
+        // Атрибуція JustWatch — обов'язкова умова TMDB для цих даних
+        whereLabel.textProperty().bind(where.map(o -> "Де подивитися: " + o.summary() + "     (дані: JustWatch)")
+                .orElse(""));
+        whereLabel.visibleProperty().bind(Bindings.createBooleanBinding(
+                () -> !Boolean.TRUE.equals(available.getValue()) && where.get() != null, available, where));
+        whereLabel.managedProperty().bind(whereLabel.visibleProperty());
 
         var watched = new ProgressBar();
         watched.getStyleClass().add("details-progress");
@@ -109,7 +134,7 @@ public final class DetailsScreen implements Screen {
         var actions = new HBox(16, playBox, listButton); // тут тепер playBox замість play
         actions.setAlignment(Pos.TOP_LEFT);              // кнопки вирівняні по верху, смужка не зсуває їх
 
-        var content = new VBox(18, name, meta, overview, actions);
+        var content = new VBox(18, name, meta, overview, actions, whereLabel);
         content.getStyleClass().add("details-content");
         content.setAlignment(Pos.BOTTOM_LEFT);
 

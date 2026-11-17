@@ -484,6 +484,7 @@
 
 .osk-action {
     -fx-font-size: 18px;
+    -fx-graphic-text-gap: 10px;
 }
 
 /* ---------- Картка: прогрес перегляду ---------- */
@@ -581,4 +582,48 @@
 .player-next-count {
     -fx-text-fill: -kb-accent;
     -fx-font-size: 18px;
+}
+
+/* ---------- Заставка ---------- */
+.splash {
+    -fx-background-color: radial-gradient(center 50% 45%, radius 60%, #2a0f12 0%, #0f0f12 70%);
+}
+.splash-logo {
+    -fx-font-size: 72px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -kb-accent;
+}
+.splash-track {
+    -fx-background-color: rgba(255, 255, 255, 0.12);
+    -fx-background-radius: 2px;
+}
+.splash-bar {
+    -fx-background-color: -kb-accent;
+    -fx-background-radius: 2px;
+}
+.splash-status {
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 18px;
+}
+
+/* ---------- Іконки кнопок геймпада ---------- */
+.pad-shoulder {
+    -fx-background-color: #2b2b31;
+    -fx-background-radius: 5px;
+    -fx-border-color: #5a5a62;
+    -fx-border-radius: 5px;
+    -fx-padding: 1 6 1 6;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #e8e8ea;
+}
+.toast-text {
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+}
+
+/* ---------- Деталі: де подивитися ---------- */
+.details-where {
+    -fx-text-fill: -kb-muted;
+    -fx-font-size: 17px;
 }

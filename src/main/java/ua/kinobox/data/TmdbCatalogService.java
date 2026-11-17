@@ -16,6 +16,8 @@ public final class TmdbCatalogService implements CatalogService {
     private static final String IMAGE_BASE = "https://image.tmdb.org/t/p/";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final int MAX_GENRES = 3;
+    /** Країна, для якої шукаємо сервіси (ISO 3166-1). */
+    private static final String REGION = "UA";
     private static final List<RowSpec> HOME_ROWS = List.of(
             new RowSpec("У тренді цього тижня", "trending/all/week", Map.of(), null),
             new RowSpec("Популярні фільми", "movie/popular", Map.of(), Title.Kind.MOVIE),
@@ -135,7 +137,8 @@ public final class TmdbCatalogService implements CatalogService {
                 overview,
                 image(item.path("poster_path"), "w342"),
                 image(item.path("backdrop_path"), "w1280"),
-                Math.floorMod(tmdbId * 47, 360));              // колір заглушки, поки вантажиться картинка
+                Math.floorMod(tmdbId * 47, 360),              // колір заглушки, поки вантажиться картинка
+                text(item.path(movie ? "original_title" : "original_name")));
     }
 
     private static void readGenres(String json, Map<Integer, String> into) {
@@ -243,6 +246,39 @@ public final class TmdbCatalogService implements CatalogService {
                     System.err.println("TMDB, тайтл " + id + ": " + error.getMessage());
                     return Optional.empty();
                 });
+    }
+
+    @Override
+    public CompletableFuture<Optional<WatchOptions>> watchOptions(Title title) {
+        String path = (title.kind() == Title.Kind.MOVIE ? "movie/" : "tv/") + tmdbId(title) + "/watch/providers";
+        return client.get(path, Map.of())
+                .thenApply(json -> {
+                    JsonNode region = read(json).path("results").path(REGION);
+                    if (region.isMissingNode()) {
+                        return Optional.<WatchOptions>empty(); // для України даних немає
+                    }
+                    var free = new ArrayList<>(providerNames(region.path("free")));
+                    free.addAll(providerNames(region.path("ads"))); // безкоштовно з рекламою — теж «безкоштовно»
+                    var options = new WatchOptions(
+                            text(region.path("link")),
+                            providerNames(region.path("flatrate")),
+                            List.copyOf(free),
+                            providerNames(region.path("rent")),
+                            providerNames(region.path("buy")));
+                    return options.isEmpty() ? Optional.<WatchOptions>empty() : Optional.of(options);
+                })
+                .exceptionally(error -> {
+                    System.err.println("TMDB, де подивитися " + title.id() + ": " + error.getMessage());
+                    return Optional.empty();
+                });
+    }
+
+    private static List<String> providerNames(JsonNode providers) {
+        var names = new ArrayList<String>();
+        for (JsonNode provider : providers) {
+            names.add(provider.path("provider_name").asText());
+        }
+        return List.copyOf(names);
     }
 
     @Override

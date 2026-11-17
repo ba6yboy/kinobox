@@ -79,3 +79,62 @@ tasks.withType<JavaCompile> {
 tasks.test {
     useJUnitPlatform()
 }
+
+// ---------- Програма для Windows (jpackage) ----------
+
+val jpackageDir = layout.buildDirectory.dir("jpackage")
+val jdkTools = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+
+/** Вхідні файли: застосунок і бібліотеки — в корінь (class path), JavaFX — у теку javafx (module path). */
+val packageInput by tasks.registering(Sync::class) {
+    group = "distribution"
+    description = "Готує jar-файли для jpackage"
+    into(jpackageDir.map { it.dir("input") })
+    from(tasks.jar)
+    from(configurations.runtimeClasspath) {
+        exclude("javafx-*")
+    }
+    from(configurations.runtimeClasspath) {
+        include("javafx-*")
+        into("javafx")
+    }
+}
+
+/** build/jpackage/image/KinoBox — тека з KinoBox.exe і вбудованою Java. WiX не потрібен. */
+val appImage by tasks.registering(Exec::class) {
+    group = "distribution"
+    description = "Створює KinoBox.exe з вбудованою Java (без інсталятора)"
+    dependsOn(packageInput)
+    val output = jpackageDir.map { it.dir("image") }
+    doFirst {
+        delete(output) // jpackage відмовляється писати в теку, де вже є попередня збірка
+        executable = jdkTools.get().metadata.installationPath.file("bin/jpackage").asFile.absolutePath
+    }
+    args(
+        "--type", "app-image",
+        "--name", "KinoBox",
+        "--app-version", version.toString(),
+        "--vendor", "KinoBox",
+        "--icon", file("src/packaging/kinobox.ico").absolutePath,
+        "--input", jpackageDir.get().dir("input").asFile.absolutePath,
+        "--main-jar", tasks.jar.get().archiveFileName.get(),
+        "--main-class", "ua.kinobox.app.Launcher",
+        "--dest", output.get().asFile.absolutePath,
+        // Ті самі налаштування, що й для запуску з IntelliJ (див. tasks.withType<JavaExec> вище):
+        // JavaFX — на module path, дозволи на нативний код і sun.misc.Unsafe
+        "--java-options", "--module-path=\$APPDIR/javafx",
+        "--java-options", "--add-modules=${javafxModules.joinToString(",")}",
+        "--java-options", "--enable-native-access=javafx.graphics,javafx.media,ALL-UNNAMED",
+        "--java-options", "--sun-misc-unsafe-memory-access=allow",
+    )
+}
+
+/** build/jpackage/KinoBox-<версія>-windows.zip — портативна версія: розпакував і запустив. */
+val portableZip by tasks.registering(Zip::class) {
+    group = "distribution"
+    description = "Архів з KinoBox для запуску без встановлення"
+    dependsOn(appImage)
+    from(jpackageDir.map { it.dir("image") })
+    archiveFileName = "KinoBox-$version-windows.zip"
+    destinationDirectory = jpackageDir
+}

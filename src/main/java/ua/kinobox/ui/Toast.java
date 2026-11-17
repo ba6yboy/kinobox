@@ -33,7 +33,8 @@ public final class Toast {
         if (running != null) {
             running.stop();
         }
-        label.setText(text);
+        label.setText(null);
+        label.setGraphic(Glyphs.hint(text, "toast-text")); // мітки {X}, {O}… стають іконками
         var in = new FadeTransition(Duration.millis(160), label);
         in.setToValue(1);
         var out = new FadeTransition(Duration.millis(300), label);

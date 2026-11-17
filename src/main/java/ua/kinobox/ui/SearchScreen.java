@@ -127,8 +127,8 @@ public final class SearchScreen implements Screen {
         status.visibleProperty().bind(status.managedProperty());
         status.setText("Введіть назву фільму чи серіалу");
 
-        var resultsHint = new Label("○ — повернутися до клавіатури      □ △ L1 — редагувати запит");
-        resultsHint.getStyleClass().add("search-hint");
+        var resultsHint = Glyphs.hint("{O} — повернутися до клавіатури        {S} {T} {L1} — редагувати запит",
+                "search-hint");
         // Видно лише тоді, коли фокус на одній з карток результатів
         resultsHint.visibleProperty().bind(results.focusWithinProperty());
 
@@ -160,11 +160,11 @@ public final class SearchScreen implements Screen {
         buildKeys();
 
         var actions = new HBox(8,
-                action("△  Пробіл", () -> type(" ")),
-                action("□  Стерти", this::backspace),
-                action("L1  Очистити", query::clear),
+                action(Glyphs.Pad.TRIANGLE, "Пробіл", () -> type(" ")),
+                action(Glyphs.Pad.SQUARE, "Стерти", this::backspace),
+                action(Glyphs.Pad.L1, "Очистити", query::clear),
                 languageToggle,
-                action("R1  Знайти", this::submit));
+                action(Glyphs.Pad.R1, "Знайти", this::submit));
         actions.getChildren().forEach(n -> HBox.setHgrow(n, Priority.ALWAYS));
 
         var keyboard = new VBox(10, keys, actions);
@@ -202,8 +202,8 @@ public final class SearchScreen implements Screen {
         languageToggle.setText(ukrainian ? "ABC" : "АБВ");
     }
 
-    private Button action(String text, Runnable onPress) {
-        var button = new Button(text);
+    private Button action(Glyphs.Pad pad, String text, Runnable onPress) {
+        var button = new Button(text, Glyphs.of(pad));
         setupKey(button, onPress);
         button.getStyleClass().add("osk-action");
         return button;

@@ -190,8 +190,8 @@ public final class PlayerScreen implements Screen {
         var bar = new HBox(18, stateIcon, progress, time);
         bar.setAlignment(Pos.CENTER_LEFT);
 
-        var help = new Label("✕ Пауза    ← → 10 с    L2 R2 30 с    □ Серії    Options Доріжки    ○ Вийти");
-        help.getStyleClass().add("player-help");
+        var help = Glyphs.hint("{X} Пауза     ← → 10 с     {L2} {R2} 30 с     {S} Серії     {OPT} Доріжки     {O} Вийти",
+                "player-help");
 
         overlay.getChildren().addAll(name, bar, help);
         overlay.getStyleClass().add("player-overlay");
@@ -312,8 +312,7 @@ public final class PlayerScreen implements Screen {
         var name = new Label(next.label());
         name.getStyleClass().add("player-next-title");
         nextCountdown.getStyleClass().add("player-next-count");
-        var help = new Label("✕ Дивитися зараз    ○ Скасувати");
-        help.getStyleClass().add("player-help");
+        var help = Glyphs.hint("{X} Дивитися зараз     {O} Скасувати", "player-help");
 
         nextPanel.getChildren().addAll(caption, name, nextCountdown, help);
         nextPanel.getStyleClass().add("player-next");
@@ -409,8 +408,7 @@ public final class PlayerScreen implements Screen {
         var saved = progressStore.position(progressKey);
         if (saved.isPresent()) {
             resumeAtMs = saved.getAsLong(); // перемотаємо в timeChanged, щойно файл стане seekable
-            notify.accept("Продовжуємо з " + format(resumeAtMs) + "    □ — почати спочатку");
-        }
+            notify.accept("Продовжуємо з " + format(resumeAtMs) + "     {S} — почати спочатку");        }
 
         // 3. І лише тепер запускаємо відтворення — рівно один раз
         player.media().play(source);

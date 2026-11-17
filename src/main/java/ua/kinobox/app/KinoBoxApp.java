@@ -28,17 +28,10 @@ import ua.kinobox.data.WatchHistory;
 import ua.kinobox.input.GamepadInput;
 import ua.kinobox.input.InputRouter;
 import ua.kinobox.input.KeyboardInput;
-import ua.kinobox.ui.DetailsScreen;
-import ua.kinobox.ui.HomeScreen;
-import ua.kinobox.ui.PlayerScreen;
-import ua.kinobox.ui.ScreenManager;
-import ua.kinobox.ui.SearchScreen;
-import ua.kinobox.ui.SettingsScreen;
-import ua.kinobox.ui.Toast;
-import ua.kinobox.video.FileSource;
-import ua.kinobox.video.JellyfinSource;
-import ua.kinobox.video.VideoSource;
+import ua.kinobox.ui.*;
+import ua.kinobox.video.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,12 +41,11 @@ public final class KinoBoxApp extends Application {
 
     /** Запуск у вікні замість повного екрана — зручно під час розробки. */
     private static final String WINDOWED_FLAG = "--windowed";
-    /** Тестове відео для всіх тайтлів, якщо Jellyfin не налаштовано. Своє: аргумент --video=шлях_або_URL */
-    private static final String DEMO_VIDEO = "E:\\JavaPRO\\Temporary\\Video Project.mp4";
 
     private final InputRouter router = new InputRouter();
     private final ScreenManager screens = new ScreenManager();
     private final Toast toast = new Toast();
+    private final Splash splash = new Splash();
     private final MyList myList = MyList.inUserHome();
     /** Один на весь застосунок: позиції перегляду всіх відео. */
     private final ProgressStore progressStore = ProgressStore.inUserHome();
@@ -72,6 +64,7 @@ public final class KinoBoxApp extends Application {
     /** Звідки береться відео. Вибирається в start(): аргументи запуску доступні лише там. */
     private VideoSource videos;
     private GamepadInput gamepad;
+    private Stage stage;
 
     public static void main(String[] args) {
         launch(args);
@@ -79,7 +72,8 @@ public final class KinoBoxApp extends Application {
 
     @Override
     public void start(Stage stage) {
-        var root = new StackPane(screens.layer(), toast.node());
+        this.stage = stage;
+        var root = new StackPane(screens.layer(), splash.node(), toast.node());
         root.getStyleClass().add("app-root");
 
         var scene = new Scene(root, 1600, 900, Color.web("#0f0f12"));
@@ -129,16 +123,20 @@ public final class KinoBoxApp extends Application {
         loadHome(catalog);
     }
 
-    /** Звідки брати відео: аргумент --video (для розробки) → Jellyfin → тестовий файл. */
+    /**
+     * Звідки брати відео:
+     *  --video (для розробки) → один файл для всього;
+     *  інакше → ваша медіатека Jellyfin (якщо налаштовано), потім Internet Archive.
+     */
     private VideoSource chooseVideoSource() {
         String override = getParameters().getNamed().get("video");
         if (override != null) {
             return new FileSource(override);
         }
-        return JellyfinClient.fromUserHome()
-                .map(JellyfinLibrary::new)
-                .<VideoSource>map(JellyfinSource::new)
-                .orElseGet(() -> new FileSource(DEMO_VIDEO));
+        var sources = new ArrayList<VideoSource>();
+        JellyfinClient.fromUserHome().map(JellyfinLibrary::new).map(JellyfinSource::new).ifPresent(sources::add);
+        sources.add(new ArchiveSource());
+        return new CompositeSource(sources);
     }
 
     /** Ряд «У вашій медіатеці»: що недавно додали в джерело відео, з описами й кадрами з каталогу. */
@@ -163,6 +161,19 @@ public final class KinoBoxApp extends Application {
             idle.playFromStart();
         });
         idle.play();
+    }
+
+    /** Тайтлу немає в джерелі відео: якщо його можна подивитися онлайн — відкриваємо сторінку в браузері. */
+    private void offerWatchElsewhere(Title title) {
+        catalog.watchOptions(title).whenComplete((options, error) -> Platform.runLater(() -> {
+            if (error != null || options.isEmpty() || options.get().link() == null) {
+                toast.show("«" + title.name() + "» немає у " + videos.name());
+                return;
+            }
+            // Повноекранний KinoBox закрив би браузер собою — згортаємо його
+            stage.setIconified(true);
+            getHostServices().showDocument(options.get().link());
+        }));
     }
 
     // ---------- Екрани ----------
@@ -190,6 +201,7 @@ public final class KinoBoxApp extends Application {
                     t -> progressStore.progressOf(progressKey(t)),  // progressOf
                     libraryTitles);                                 // library
             screens.push(new HomeScreen(rows, actions));
+            splash.hide();
         }));
     }
 
@@ -248,7 +260,7 @@ public final class KinoBoxApp extends Application {
                 System.err.println("Відео «" + title.name() + "»: " + error.getMessage());
             }
             if (error != null || url.isEmpty()) {
-                toast.show("«" + title.name() + "» немає у " + videos.name());
+                offerWatchElsewhere(title);
                 return;
             }
             play(title, title, url.get(), title.id(), null);
@@ -271,7 +283,12 @@ public final class KinoBoxApp extends Application {
                         System.err.println("Відео «" + series.name() + "» " + episode.label() + ": " + error.getMessage());
                     }
                     if (error != null || resolved.url().isEmpty()) {
-                        toast.show(episode.label() + " «" + series.name() + "» немає у " + videos.name());
+                        // Немає всього серіалу — пропонуємо подивитися онлайн; немає лише цієї серії — повідомляємо
+                        if (!Boolean.TRUE.equals(videos.availability(series).getValue())) {
+                            offerWatchElsewhere(series);
+                        } else {
+                            toast.show(episode.label() + " «" + series.name() + "» немає у " + videos.name());
+                        }
                         return;
                     }
                     PlayerScreen.Next next = resolved.next()

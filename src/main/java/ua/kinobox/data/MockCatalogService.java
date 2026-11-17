@@ -52,7 +52,7 @@ public final class MockCatalogService implements CatalogService {
                 + "героям доведеться вирішити, кому довіряти. Історія про вибір, ціну правди "
                 + "і людей, які не здаються навіть тоді, коли все проти них.";
         return new Title(id, name, kind, 1995 + rnd.nextInt(31), genres, rating, overview,
-                null, null, rnd.nextDouble() * 360);
+                null, null, rnd.nextDouble() * 360, name);
     }
 
     @Override

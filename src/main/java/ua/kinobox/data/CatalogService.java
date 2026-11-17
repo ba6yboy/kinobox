@@ -47,4 +47,9 @@ public interface CatalogService {
                         .flatMap(Optional::stream)      // порожні Optional просто зникають зі списку
                         .toList());
     }
+
+    /** Де легально подивитися тайтл онлайн. Порожньо, якщо даних немає. Не завершується помилкою. */
+    default CompletableFuture<Optional<WatchOptions>> watchOptions(Title title) {
+        return CompletableFuture.completedFuture(Optional.empty());
+    }
 }
